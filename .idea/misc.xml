@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="CidrRootsConfiguration">
+    <sourceRoots>
+      <file path="$PROJECT_DIR$/src" />
+      <file path="$PROJECT_DIR$/src/io" />
+      <file path="$PROJECT_DIR$/src/sensors" />
+      <file path="$PROJECT_DIR$/src/serial" />
+      <file path="$PROJECT_DIR$/src/utils" />
+    </sourceRoots>
+  </component>
   <component name="ExternalStorageConfigurationManager" enabled="true" />
   <component name="PlatformIOSettings">
     <option name="linkedExternalProjectsSettings">
