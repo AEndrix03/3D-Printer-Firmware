@@ -5,8 +5,13 @@
 #ifndef INC_3D_PRINTER_FIRMWARE_SENSOR_H
 #define INC_3D_PRINTER_FIRMWARE_SENSOR_H
 
-class Sensor {
+#include "SensorEnum.h"
 
+class Sensor {
+public:
+    virtual void setup(SensorEnum type) = 0;
+    virtual bool doAction(char action) = 0;
+    virtual ~Sensor() = default;
 };
 
 #endif //INC_3D_PRINTER_FIRMWARE_SENSOR_H

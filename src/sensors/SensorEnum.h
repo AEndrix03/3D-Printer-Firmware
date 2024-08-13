@@ -1,0 +1,12 @@
+//
+// Created by redeg on 12/08/2024.
+//
+
+#ifndef INC_3D_PRINTER_FIRMWARE_SENSORENUM_H
+#define INC_3D_PRINTER_FIRMWARE_SENSORENUM_H
+
+enum SensorEnum {MOTOR_A, MOTOR_X, MOTOR_Y, MOTOR_Z, ERROR_LED};
+
+enum SensorType {MOTOR, LED};
+
+#endif //INC_3D_PRINTER_FIRMWARE_SENSORENUM_H

@@ -1,15 +1,16 @@
 //
-// Created by redeg on 24/06/2024.
+// Created by redeg on 13/08/2024.
 //
 
 #ifndef INC_3D_PRINTER_FIRMWARE_COMMANDEXECUTE_H
 #define INC_3D_PRINTER_FIRMWARE_COMMANDEXECUTE_H
 
-#include "io/commands/Command.h"
+#include <WString.h>
 
 class CommandExecute {
 protected:
-    virtual void execute(Command* arguments) = 0;
+    virtual String execute() = 0;
+    virtual ~CommandExecute() = default;
 };
 
 #endif //INC_3D_PRINTER_FIRMWARE_COMMANDEXECUTE_H
