@@ -15,7 +15,7 @@ public:
     explicit Motor(SensorEnum motorType);
     void setup(SensorEnum motorType) override;
     bool doAction(char action) override;
-    virtual ~Motor() = default;
+    ~Motor() override = default;
 protected:
     void handleException() override;
     void move(bool up);

@@ -31,6 +31,9 @@ void Motor::setup(SensorEnum motorType) {
         dirVoltage = config::A_INVERT_DIRECTION ? LOW : HIGH;
         speed = (1/(2*config::A_MAX_SPEED))*1000;
     }
+
+    pinMode(stepPin, OUTPUT);
+    pinMode(dirPin, OUTPUT);
 }
 
 bool Motor::doAction(char action) {
