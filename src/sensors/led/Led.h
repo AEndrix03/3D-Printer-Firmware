@@ -13,7 +13,7 @@ class Led : public Sensor {
 public:
     explicit Led(SensorEnum s);
     void setup(SensorEnum ledType) override;
-    bool doAction(char action) override;
+    bool doAction(char action, double* returnValue) override;
     ~Led() override = default;
 protected:
     void turnOn();

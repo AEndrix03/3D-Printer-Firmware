@@ -17,7 +17,7 @@ public:
     char getAction() const;
     int getRepeat() const;
     String execute() override;
-    virtual ~Command() = default;
+    ~Command() override = default;
 protected:
     bool tcpExecute(Sensor* sensor) const;
     int udpExecute(Sensor* sensor) const;

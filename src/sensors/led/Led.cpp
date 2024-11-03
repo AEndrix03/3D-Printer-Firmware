@@ -18,7 +18,7 @@ void Led::setup(SensorEnum ledType) {
     pinMode(pin, OUTPUT);
 }
 
-bool Led::doAction(char action) {
+bool Led::doAction(char action, double* returnValue) {
     if (action == 0) {
         turnOff();
     } else if (action == 1) {

@@ -30,6 +30,9 @@ namespace pins {
 
     //Error
     const int ERROR_LED = 1;
+
+    //Temperature
+    const int TEMP = A4;
 }
 
 #endif //INC_3D_PRINTER_FIRMWARE_SENSORPINOUT_H

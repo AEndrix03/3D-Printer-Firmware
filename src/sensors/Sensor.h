@@ -10,7 +10,7 @@
 class Sensor {
 public:
     virtual void setup(SensorEnum type) = 0;
-    virtual bool doAction(char action) = 0;
+    virtual bool doAction(char action, double* returnValue) = 0;
     virtual ~Sensor() = default;
 };
 

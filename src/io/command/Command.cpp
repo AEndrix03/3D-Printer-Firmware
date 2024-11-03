@@ -5,15 +5,22 @@
 #include "Command.h"
 #include "sensors/SensorMap.h"
 #include "sensors/motors/Motor.h"
+#include "sensors/led/Led.h"
+#include "sensors/temp/Temperature.h"
 
 String Command::execute() {
     Sensor* s;
     SensorMap sm;
     SensorEnum en = sm.get(this->id);
-    //SensorType t = sm.getType(this->id);
+    SensorType t = sm.getType(this->id);
 
-    //sempre if (t == MOTOR)
+    if (t == MOTOR)
         s = new Motor(en);
+    else if (t == LED) {
+        s = new Led(en);
+    } else {
+        s = new Temperature();
+    }
 
     String ret = "";
 
@@ -27,22 +34,6 @@ String Command::execute() {
 
     delete s;
     return ret;
-}
-
-char Command::getExecMode() const {
-    return execMode;
-}
-
-char Command::getId() const {
-    return id;
-}
-
-char Command::getAction() const {
-    return action;
-}
-
-int Command::getRepeat() const {
-    return repeat;
 }
 
 Command::Command(String command) {
@@ -67,20 +58,30 @@ Command::Command(String command) {
 
 bool Command::tcpExecute(Sensor* sensor) const {
     int i;
-    for (i = 0; i < this->repeat; i++)
-        if(!sensor->doAction(this->action))
+    for (i = 0; i < this->repeat; i++) {
+        double *returnValue = nullptr;
+        if (!sensor->doAction(this->action, returnValue))
             return false;
 
+        if (returnValue) {
+            printf("%f\n", *returnValue);
+        }
+    }
     return true;
 }
 
 int Command::udpExecute(Sensor* sensor) const {
     int i;
     int e = 0;
-    for (i = 0; i < this->repeat; i++)
-        if(!sensor->doAction(this->action))
+    for (i = 0; i < this->repeat; i++) {
+        double *returnValue = nullptr;
+        if (!sensor->doAction(this->action, returnValue))
             e++;
 
+        if (returnValue) {
+            printf("%f\n", *returnValue);
+        }
+    }
     return e;
 }
 

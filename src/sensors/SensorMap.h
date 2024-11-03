@@ -24,6 +24,8 @@ SensorEnum SensorMap::get(const char type) {
             return MOTOR_Z;
         case 3:
             return MOTOR_A;
+        case 4:
+            return TEMP;
         default:
             return ERROR_LED;
     }
@@ -36,6 +38,10 @@ SensorType SensorMap::getType(char type) {
         case 2:
         case 3:
             return MOTOR;
+        case 4:
+            return TEMPERATURE;
+        case 5:
+            return ENDSTOP;
         default:
             return LED;
     }

@@ -14,7 +14,7 @@ class Motor : public Sensor, protected Throwable {
 public:
     explicit Motor(SensorEnum motorType);
     void setup(SensorEnum motorType) override;
-    bool doAction(char action) override;
+    bool doAction(char action, double* returnValue) override;
     ~Motor() override = default;
 protected:
     void handleException() override;

@@ -38,6 +38,11 @@ namespace config {
 
     const bool ENABLE_ERRORS_LED_LOG = false;
     const int ERROR_DELAY_MS = 500;
+
+    const double TEMP_SENSOR_0_RES_0 = 100000;
+    const double TEMP_SENSOR_0_TEMP_0 = 298.15;
+    const double TEMP_SENSOR_0_BETA = 3950;
+    const double TEMP_SENSOR_0_SER_RES = 16370;
 };
 
 #endif //INC_3D_PRINTER_FIRMWARE_SENSORSCONFIGURATION_H

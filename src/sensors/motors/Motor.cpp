@@ -36,7 +36,7 @@ void Motor::setup(SensorEnum motorType) {
     pinMode(dirPin, OUTPUT);
 }
 
-bool Motor::doAction(char action) {
+bool Motor::doAction(char action, double* returnValue) {
     if (digitalRead(endStopPin) == HIGH) {
         //Potrebbe essersi bloccato
         handleException();
