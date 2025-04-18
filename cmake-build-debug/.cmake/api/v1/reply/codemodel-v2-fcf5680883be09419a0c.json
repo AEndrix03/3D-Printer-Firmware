@@ -29,7 +29,7 @@
 					[
 						0
 					],
-					"name" : "archetype",
+					"name" : "3D-Printer-Firmware",
 					"targetIndexes" : 
 					[
 						0,
@@ -42,9 +42,9 @@
 			[
 				{
 					"directoryIndex" : 0,
-					"id" : "archetype::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-archetype-Debug-15ec8cebd0c93dd5a6d4.json",
-					"name" : "archetype",
+					"id" : "3D-Printer-Firmware::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-3D-Printer-Firmware-Debug-ac8d637a9d11e00f1f46.json",
+					"name" : "3D-Printer-Firmware",
 					"projectIndex" : 0
 				},
 				{

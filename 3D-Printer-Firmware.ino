@@ -1,6 +1,6 @@
 // Rename this file with the project folder name
 
-#include "./src/Application.h"
+#include "src/include/Application.hpp"
 
 Application application;
 

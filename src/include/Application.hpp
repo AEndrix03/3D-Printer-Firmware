@@ -2,8 +2,8 @@
 // Created by redeg on 17/04/2025.
 //
 
-#ifndef ARCHETYPE_APPLICATION_H
-#define ARCHETYPE_APPLICATION_H
+#ifndef ARCHETYPE_APPLICATION_HPP
+#define ARCHETYPE_APPLICATION_HPP
 
 
 class Application {
@@ -13,4 +13,4 @@ public:
 };
 
 
-#endif //ARCHETYPE_APPLICATION_H
+#endif //ARCHETYPE_APPLICATION_HPP

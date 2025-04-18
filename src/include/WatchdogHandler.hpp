@@ -1,0 +1,8 @@
+//
+// Created by redeg on 19/04/2025.
+//
+
+#ifndef ARCHETYPE_WATCHDOGHANDLER_H
+#define ARCHETYPE_WATCHDOGHANDLER_H
+
+#endif //ARCHETYPE_WATCHDOGHANDLER_H

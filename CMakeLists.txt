@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(archetype CXX)
+project(3D-Printer-Firmware CXX)
 
 set(ARDUINO_CLI "arduino-cli")
 set(BOARD_FQBN "arduino:avr:uno")
@@ -11,7 +11,7 @@ include_directories(
         "C:/Users/redeg/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.6/variants/standard"
 )
 
-add_executable(archetype ./src/Application.cpp)
+add_executable(3D-Printer-Firmware ./src/Application.cpp)
 
 add_custom_target(compile
     COMMAND ${ARDUINO_CLI} compile --fqbn ${BOARD_FQBN} ${CMAKE_SOURCE_DIR}

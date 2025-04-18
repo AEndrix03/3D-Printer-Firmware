@@ -1,0 +1,8 @@
+//
+// Created by redeg on 19/04/2025.
+//
+
+#ifndef ARCHETYPE_FANCONTROLLER_H
+#define ARCHETYPE_FANCONTROLLER_H
+
+#endif //ARCHETYPE_FANCONTROLLER_H

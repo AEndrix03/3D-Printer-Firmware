@@ -2,10 +2,10 @@
 	"artifacts" : 
 	[
 		{
-			"path" : "archetype.exe"
+			"path" : "3D-Printer-Firmware.exe"
 		},
 		{
-			"path" : "archetype.pdb"
+			"path" : "3D-Printer-Firmware.pdb"
 		}
 	],
 	"backtrace" : 1,
@@ -74,7 +74,7 @@
 			]
 		}
 	],
-	"id" : "archetype::@6890427a1f51a3e7e1df",
+	"id" : "3D-Printer-Firmware::@6890427a1f51a3e7e1df",
 	"link" : 
 	{
 		"commandFragments" : 
@@ -94,8 +94,8 @@
 		],
 		"language" : "CXX"
 	},
-	"name" : "archetype",
-	"nameOnDisk" : "archetype.exe",
+	"name" : "3D-Printer-Firmware",
+	"nameOnDisk" : "3D-Printer-Firmware.exe",
 	"paths" : 
 	{
 		"build" : ".",

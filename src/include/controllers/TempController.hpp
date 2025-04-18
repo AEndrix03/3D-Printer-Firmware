@@ -1,0 +1,8 @@
+//
+// Created by redeg on 19/04/2025.
+//
+
+#ifndef ARCHETYPE_TEMPCONTROLLER_H
+#define ARCHETYPE_TEMPCONTROLLER_H
+
+#endif //ARCHETYPE_TEMPCONTROLLER_H

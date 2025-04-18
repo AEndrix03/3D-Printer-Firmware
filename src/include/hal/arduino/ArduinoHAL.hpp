@@ -1,0 +1,8 @@
+//
+// Created by redeg on 19/04/2025.
+//
+
+#ifndef ARCHETYPE_ARDUINOHAL_H
+#define ARCHETYPE_ARDUINOHAL_H
+
+#endif //ARCHETYPE_ARDUINOHAL_H
