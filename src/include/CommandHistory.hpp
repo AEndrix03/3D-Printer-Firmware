@@ -27,4 +27,10 @@ namespace CommandHistory {
      * @return Puntatore alla stringa se trovata, nullptr altrimenti
      */
     const char *get(uint16_t number);
+
+    /**
+     * @brief Svuota completamente la history.
+     */
+    void clear();
+
 }

@@ -6,6 +6,8 @@
  */
 namespace SerialCommandReceiver {
 
+    extern uint16_t lastCommandNumber;
+
     /**
      * @brief Deve essere chiamata regolarmente nel loop.
      * Legge i caratteri dalla seriale e, se il comando è completo, lo smista.

@@ -5,6 +5,7 @@
 #include "./include/controllers/FanController.hpp"
 #include "./include/controllers/SystemController.hpp"
 #include "./include/controllers/EndstopController.hpp"
+#include "./include/controllers/HistoryController.hpp"
 
 void CommandDispatcher::dispatch(const ParsedCommand &cmd) {
     switch (cmd.category) {
@@ -22,6 +23,9 @@ void CommandDispatcher::dispatch(const ParsedCommand &cmd) {
             break;
         case 'E':
             EndstopController::handle(cmd.code, cmd.params);
+            break;
+        case 'H':
+            HistoryController::handle(cmd.code, cmd.params);
             break;
         default:
             Serial.print(F("ERR N"));

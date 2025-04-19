@@ -5,10 +5,12 @@
 #include "./include/CommandHistory.hpp"
 #include "./include/SafetyManager.hpp"
 
+uint16_t SerialCommandReceiver::lastCommandNumber = 0;
+
 namespace {
     char inputBuffer[64];
     uint8_t bufferIndex = 0;
-    uint16_t lastCommandNumber = 0;
+
 
     uint8_t computeChecksum(const char *str) {
         uint8_t cs = 0;

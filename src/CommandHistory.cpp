@@ -38,4 +38,11 @@ namespace CommandHistory {
         return nullptr;
     }
 
+    void clear() {
+        for (uint8_t i = 0; i < BUFFER_SIZE; ++i) {
+            buffer[i].number = 0xFFFF;
+            buffer[i].text[0] = '\0';
+        }
+    }
+
 }
