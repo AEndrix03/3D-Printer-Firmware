@@ -11,6 +11,10 @@ constexpr uint8_t PIN_X_STEP = 2;
 constexpr uint8_t PIN_X_DIR = 5;
 constexpr uint8_t PIN_Y_STEP = 3;
 constexpr uint8_t PIN_Y_DIR = 6;
+constexpr uint8_t PIN_Z_STEP = 4;
+constexpr uint8_t PIN_Z_DIR = 7;
+constexpr uint8_t PIN_E_STEP = 8;
+constexpr uint8_t PIN_E_DIR = 11;
 
 // Finecorsa
 constexpr uint8_t PIN_ENDSTOP_X = 9;
