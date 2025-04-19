@@ -6,7 +6,7 @@
 namespace MotionController {
 
     /**
-     * @brief Inizializza eventuali driver stepper e limiti.
+     * @brief Inizializza eventuali driver drivers e limiti.
      */
     void init();
 

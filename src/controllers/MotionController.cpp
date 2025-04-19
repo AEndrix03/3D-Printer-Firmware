@@ -1,37 +1,51 @@
 #include <Arduino.h>
 #include "../include/controllers/MotionController.hpp"
 #include "../include/Pins.hpp"
+#include "../include/hal/drivers/stepper/A4988Stepper.hpp"
+
+namespace {
+    A4988Stepper stepperX(PIN_X_STEP, PIN_X_DIR);
+    A4988Stepper stepperY(PIN_Y_STEP, PIN_Y_DIR);
+}
 
 namespace MotionController {
 
     void init() {
-        pinMode(PIN_X_STEP, OUTPUT);
-        pinMode(PIN_X_DIR, OUTPUT);
-        pinMode(PIN_Y_STEP, OUTPUT);
-        pinMode(PIN_Y_DIR, OUTPUT);
+        stepperX.init();
+        stepperY.init();
+        stepperX.enable(true);
+        stepperY.enable(true);
     }
 
     void moveTo(float x, float y, float f) {
-        // Movimento simulato con stampa su seriale (nessuna interpolazione o stepper reale)
+        // Movimento dimostrativo: 100 step per asse
         Serial.print(F("MOVE to X="));
         Serial.print(x);
         Serial.print(F(" Y="));
         Serial.print(y);
         Serial.print(F(" F="));
         Serial.println(f);
+
+        stepperX.setDirection(x >= 0);
+        stepperY.setDirection(y >= 0);
+
+        int steps = 100;  // test
+        for (int i = 0; i < steps; ++i) {
+            stepperX.step();
+            stepperY.step();
+            delayMicroseconds(100);  // temporizzazione base
+        }
     }
 
     void emergencyStop() {
-        // Spegni output / stop istantaneo
-        digitalWrite(PIN_X_STEP, LOW);
-        digitalWrite(PIN_Y_STEP, LOW);
+        stepperX.enable(false);
+        stepperY.enable(false);
         Serial.println(F("EMERGENCY STOP triggered"));
     }
 
     void handle(int code, const char *params) {
         switch (code) {
             case 10: {
-                // Parse X, Y, F
                 float x = 0.0f, y = 0.0f, f = 1000.0f;
                 const char *px = strchr(params, 'X');
                 const char *py = strchr(params, 'Y');
