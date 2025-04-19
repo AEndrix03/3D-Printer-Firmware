@@ -1,8 +1,24 @@
-//
-// Created by redeg on 19/04/2025.
-//
+#pragma once
 
-#ifndef ARCHETYPE_SYSTEMCONTROLLER_H
-#define ARCHETYPE_SYSTEMCONTROLLER_H
+/**
+ * @brief Espone comandi di sistema generici (status, reset, info).
+ */
+namespace SystemController {
 
-#endif //ARCHETYPE_SYSTEMCONTROLLER_H
+    /**
+     * @brief Gestisce un comando di sistema.
+     * @param code Codice (es. 10 = STATUS, 0 = RESET)
+     * @param params Parametri (eventualmente vuoti)
+     */
+    void handle(int code, const char *params);
+
+    /**
+     * @brief Stampa sul log seriale lo stato della macchina.
+     */
+    void printStatus();
+
+    /**
+     * @brief Esegue un reset soft del sistema (logico).
+     */
+    void reset();
+}

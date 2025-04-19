@@ -1,8 +1,14 @@
-//
-// Created by redeg on 19/04/2025.
-//
+#pragma once
 
-#ifndef ARCHETYPE_SERIALCOMMANDRECEIVER_H
-#define ARCHETYPE_SERIALCOMMANDRECEIVER_H
+/**
+ * @brief Gestisce la ricezione di comandi via seriale.
+ * Esegue lettura carattere per carattere e costruisce ParsedCommand.
+ */
+namespace SerialCommandReceiver {
 
-#endif //ARCHETYPE_SERIALCOMMANDRECEIVER_H
+    /**
+     * @brief Deve essere chiamata regolarmente nel loop.
+     * Legge i caratteri dalla seriale e, se il comando è completo, lo smista.
+     */
+    void update();
+}

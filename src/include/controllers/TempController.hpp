@@ -1,8 +1,36 @@
-//
-// Created by redeg on 19/04/2025.
-//
+#pragma once
 
-#ifndef ARCHETYPE_TEMPCONTROLLER_H
-#define ARCHETYPE_TEMPCONTROLLER_H
+/**
+ * @brief Gestisce la lettura della temperatura e il controllo termico (es. PID).
+ */
+namespace TempController {
 
-#endif //ARCHETYPE_TEMPCONTROLLER_H
+    /**
+     * @brief Inizializza pin, ADC e strutture termiche.
+     */
+    void init();
+
+    /**
+     * @brief Esegue un comando termico (lettura, set, PID, ecc).
+     * @param code Codice del comando (es. 10 = SET, 20 = READ)
+     * @param params Parametri del comando (es. "T200")
+     */
+    void handle(int code, const char *params);
+
+    /**
+     * @brief Restituisce la temperatura attuale (°C).
+     */
+    float getTemperature();
+
+    /**
+     * @brief Imposta una nuova temperatura target.
+     * @param temp Valore in gradi Celsius
+     */
+    void setTargetTemperature(float temp);
+
+    /**
+     * @brief Verifica se la temperatura è stabile attorno al target.
+     * @return true se stabile entro un margine ±X °C
+     */
+    bool isStable();
+}

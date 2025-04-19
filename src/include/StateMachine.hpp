@@ -1,8 +1,33 @@
-//
-// Created by redeg on 19/04/2025.
-//
+#pragma once
 
-#ifndef ARCHETYPE_STATEMACHINE_H
-#define ARCHETYPE_STATEMACHINE_H
+/**
+ * @brief Gestione dello stato corrente della macchina (Idle, Print, Error, ecc).
+ */
+enum class MachineState {
+    Idle,
+    Homing,
+    Printing,
+    Paused,
+    Error
+};
 
-#endif //ARCHETYPE_STATEMACHINE_H
+namespace StateMachine {
+
+    /**
+     * @brief Imposta un nuovo stato macchina.
+     * @param newState Stato desiderato
+     */
+    void setState(MachineState newState);
+
+    /**
+     * @brief Restituisce lo stato attuale.
+     * @return Stato macchina corrente
+     */
+    MachineState getState();
+
+    /**
+     * @brief Restituisce il nome dello stato come stringa.
+     * @return Es. "Idle", "Printing", ...
+     */
+    const char *getStateName();
+}

@@ -1,8 +1,19 @@
-//
-// Created by redeg on 19/04/2025.
-//
+#pragma once
 
-#ifndef ARCHETYPE_ARDUINOHAL_H
-#define ARCHETYPE_ARDUINOHAL_H
+#include <stdint.h>
 
-#endif //ARCHETYPE_ARDUINOHAL_H
+namespace hal {
+    void writeDigital(uint8_t pin, bool value);
+
+    bool readDigital(uint8_t pin);
+
+    int readAnalog(uint8_t pin);
+
+    void delayMicroseconds(uint32_t us);
+
+    void setupPwm(uint8_t pin);
+
+    void writePwm(uint8_t pin, uint8_t value);
+
+    void configureInputPullup(uint8_t pin);
+}

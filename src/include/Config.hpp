@@ -1,8 +1,13 @@
-//
-// Created by redeg on 19/04/2025.
-//
+#pragma once
 
-#ifndef ARCHETYPE_CONFIG_H
-#define ARCHETYPE_CONFIG_H
+/**
+ * @brief Costanti di configurazione globale per macchina.
+ */
 
-#endif //ARCHETYPE_CONFIG_H
+// Meccanica
+constexpr float STEPS_PER_MM_X = 80.0f;
+constexpr float STEPS_PER_MM_Y = 80.0f;
+
+// Termico
+constexpr float TEMP_MAX = 250.0f;      // Massima temperatura sicura
+constexpr float TEMP_HYSTERESIS = 2.0f; // Tolleranza per stabilità

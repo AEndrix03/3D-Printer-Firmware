@@ -1,8 +1,17 @@
-//
-// Created by redeg on 19/04/2025.
-//
+#pragma once
 
-#ifndef ARCHETYPE_COMMANDDISPATCHER_H
-#define ARCHETYPE_COMMANDDISPATCHER_H
+#include "Types.hpp"
 
-#endif //ARCHETYPE_COMMANDDISPATCHER_H
+/**
+ * @brief Dispatcher centrale che smista i comandi ricevuti ai rispettivi controller (Motion, Temp, ecc).
+ *
+ * Funziona in base alla categoria (M, T, S, ecc.) e al codice numerico associato.
+ */
+namespace CommandDispatcher {
+
+    /**
+     * @brief Smista il comando parsato al modulo appropriato.
+     * @param cmd Comando decodificato, già validato
+     */
+    void dispatch(const ParsedCommand &cmd);
+}
