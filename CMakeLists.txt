@@ -1,25 +1,27 @@
 cmake_minimum_required(VERSION 3.20)
 project(3D-Printer-Firmware CXX)
-
-set(ARDUINO_CLI "arduino-cli")
-set(BOARD_FQBN "arduino:avr:uno")
-set(PORT "COM3")
 set(CMAKE_CXX_STANDARD 14)
 
+# Path della toolchain installata
+set(ARDUINO_CORE_PATH "C:/Users/redeg/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.6")
+
 include_directories(
-        "C:/Users/redeg/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.6/cores/arduino"
-        "C:/Users/redeg/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.6/variants/standard"
+        ${ARDUINO_CORE_PATH}/cores/arduino
+        ${ARDUINO_CORE_PATH}/variants/standard
+        "C:/Users/redeg/AppData/Local/Arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/avr/include"
 )
 
-add_executable(3D-Printer-Firmware ./src/Application.cpp)
-
-add_custom_target(compile
-    COMMAND ${ARDUINO_CLI} compile --fqbn ${BOARD_FQBN} ${CMAKE_SOURCE_DIR}
-    COMMENT "Compilazione del progetto Arduino"
+add_definitions(
+        -DARDUINO=10805
+        -DF_CPU=16000000L
+        -DARDUINO_AVR_UNO
+        -D__AVR__
+        -mmcu=atmega328p
 )
 
-add_custom_target(upload
-    COMMAND ${ARDUINO_CLI} upload -p ${PORT} --fqbn ${BOARD_FQBN} ${CMAKE_SOURCE_DIR}
-    COMMENT "Upload del progetto sulla board"
-    DEPENDS compile
+file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
+        "src/*.cpp"
+        "include/**/*.hpp"
 )
+
+add_executable(3D-Printer-Firmware ${SRC_FILES})

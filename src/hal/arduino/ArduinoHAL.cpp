@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include "hal/arduino/ArduinoHAL.hpp"
+#include "../../include/hal/arduino/ArduinoHAL.hpp"
 
 namespace hal {
 

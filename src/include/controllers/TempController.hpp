@@ -33,4 +33,10 @@ namespace TempController {
      * @return true se stabile entro un margine ±X °C
      */
     bool isStable();
+
+    /**
+     * @brief Abilita o disabilita il controllo della temperatura
+     */
+    void enableMonitoring(bool enabled);
+
 }

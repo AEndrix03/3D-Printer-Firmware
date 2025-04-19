@@ -1,5 +1,3 @@
 D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/3D-Printer-Firmware.dir
-D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/compile.dir
-D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/upload.dir
 D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/edit_cache.dir
 D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/rebuild_cache.dir
