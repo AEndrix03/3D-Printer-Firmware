@@ -2,6 +2,7 @@
 #include "../include/controllers/MotionController.hpp"
 #include "../include/Pins.hpp"
 #include "../include/hal/drivers/stepper/A4988Stepper.hpp"
+#include "../include/motion/MotionPlanner.hpp"
 
 namespace {
     A4988Stepper stepperX(PIN_X_STEP, PIN_X_DIR);
@@ -10,7 +11,6 @@ namespace {
 }
 
 namespace MotionController {
-
     void init() {
         stepperX.init();
         stepperY.init();
@@ -21,7 +21,6 @@ namespace MotionController {
     }
 
     void moveTo(float x, float y, float z, float f) {
-        // Movimento dimostrativo: 100 step per asse
         Serial.print(F("MOVE to X="));
         Serial.print(x);
         Serial.print(F(" Y="));
@@ -31,18 +30,31 @@ namespace MotionController {
         Serial.print(F(" F="));
         Serial.println(f);
 
-        stepperX.setDirection(x >= 0);
-        stepperY.setDirection(y >= 0);
-        stepperZ.setDirection(z >= 0);
+        MotionCommand cmd = {x, y, z, f};
+        MotionPlan plan = planMotion(cmd);
 
-        int steps = 100;  // test
-        for (int i = 0; i < steps; ++i) {
-            stepperX.step();
-            stepperY.step();
-            stepperZ.step();
-            delayMicroseconds(100);  // temporizzazione base
+        stepperX.setDirection(plan.dirX);
+        stepperY.setDirection(plan.dirY);
+        stepperZ.setDirection(plan.dirZ);
+
+        int maxSteps = plan.stepsX;
+        if (plan.stepsY > maxSteps) maxSteps = plan.stepsY;
+        if (plan.stepsZ > maxSteps) maxSteps = plan.stepsZ;
+
+        for (int i = 0; i < maxSteps; ++i) {
+            if (i < plan.stepsX)
+                stepperX.
+                        step();
+            if (i < plan.stepsY)
+                stepperY.
+                        step();
+            if (i < plan.stepsZ)
+                stepperZ.
+                        step();
+            delayMicroseconds(plan.delayMicros);
         }
     }
+
 
     void emergencyStop() {
         stepperX.enable(false);
@@ -74,5 +86,4 @@ namespace MotionController {
                 break;
         }
     }
-
 }
