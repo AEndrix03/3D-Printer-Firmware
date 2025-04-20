@@ -35,6 +35,12 @@ namespace SafetyManager {
     bool hasCriticalCondition();
 
     /**
+     * @brief Verifica se alcuni endstop sono attivi durante modalità critiche come la stampa.
+     * @return true se è attivo uno o più endstop quando lo stato è Printing
+     */
+    bool isAnyEndstopTriggered();
+
+    /**
      * @brief Applica logica di emergenza in caso di problemi.
      */
     void emergencyStop(const char *reason);

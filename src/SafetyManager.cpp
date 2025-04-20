@@ -3,7 +3,9 @@
 #include "./include/controllers/TempController.hpp"
 #include "./include/controllers/MotionController.hpp"
 #include "./include/StateMachine.hpp"
-#include "./include/Pins.hpp" // <--- Aggiunto qui
+#include "./include/Pins.hpp"
+#include "./include/controllers/EndstopController.hpp"
+
 
 namespace {
     unsigned long lastCommandTime = 0;
@@ -24,6 +26,10 @@ namespace SafetyManager {
         if (hasCriticalCondition()) {
             emergencyStop("TEMP OVERLIMIT");
         }
+
+        if (isAnyEndstopTriggered()) {
+            emergencyStop("ENDSTOP TRIGGERED DURING PRINTING PHASE");
+        }
     }
 
 
@@ -38,6 +44,10 @@ namespace SafetyManager {
     bool hasCriticalCondition() {
         float temp = TempController::getTemperature();
         return temp > 250.0f;
+    }
+
+    bool isAnyEndstopTriggered() {
+        return StateMachine::getState() == MachineState::Printing && EndstopController::isAnyTriggered();
     }
 
     void emergencyStop(const char *reason) {

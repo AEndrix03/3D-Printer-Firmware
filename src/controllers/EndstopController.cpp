@@ -37,4 +37,8 @@ namespace EndstopController {
         bool raw = digitalRead(PIN_ENDSTOP_Z);
         return EndstopConfig::ENDSTOP_INVERTED_Z ? (raw == HIGH) : (raw == LOW);
     }
+
+    bool isAnyTriggered() {
+        return isTriggeredX() || isTriggeredY() || isTriggeredZ();
+    }
 }

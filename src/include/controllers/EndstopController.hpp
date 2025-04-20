@@ -31,4 +31,9 @@ namespace EndstopController {
      * @brief Verifica se il finecorsa Z è attivo.
      */
     bool isTriggeredZ();
+
+    /**
+     * @brief Verifica se un qualsiasi finecorsa è attivo.
+     */
+    bool isAnyTriggered();
 }
