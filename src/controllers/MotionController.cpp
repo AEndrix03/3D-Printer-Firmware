@@ -42,16 +42,18 @@ namespace MotionController {
         if (plan.stepsZ > maxSteps) maxSteps = plan.stepsZ;
 
         for (int i = 0; i < maxSteps; ++i) {
-            if (i < plan.stepsX)
-                stepperX.
-                        step();
-            if (i < plan.stepsY)
-                stepperY.
-                        step();
-            if (i < plan.stepsZ)
-                stepperZ.
-                        step();
-            delayMicroseconds(plan.delayMicros);
+            if (i < plan.stepsX) {
+                stepperX.step();
+                delayMicroseconds(plan.delayMicrosX);
+            }
+            if (i < plan.stepsY) {
+                stepperY.step();
+                delayMicroseconds(plan.delayMicrosY);
+            }
+            if (i < plan.stepsZ) {
+                stepperZ.step();
+                delayMicroseconds(plan.delayMicrosZ);
+            }
         }
     }
 
