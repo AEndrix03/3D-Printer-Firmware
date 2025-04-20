@@ -1,4 +1,5 @@
 #pragma once
+
 #include <stdint.h>
 
 // Motori
@@ -10,7 +11,6 @@ constexpr uint8_t PIN_Z_STEP = 4;
 constexpr uint8_t PIN_Z_DIR = 7;
 constexpr uint8_t PIN_E_STEP = 12;
 constexpr uint8_t PIN_E_DIR = 13;
-constexpr uint8_t PIN_ENABLE = 8;
 
 // Finecorsa
 constexpr uint8_t PIN_ENDSTOP_X = 9;

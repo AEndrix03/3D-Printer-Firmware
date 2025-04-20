@@ -1,5 +1,8 @@
 #include <Arduino.h>
+
 #include "../include/controllers/MotionController.hpp"
+#include "../include/controllers/EndstopController.hpp"
+
 #include "../include/Pins.hpp"
 #include "../include/hal/drivers/stepper/A4988Stepper.hpp"
 #include "../include/motion/MotionPlanner.hpp"
@@ -43,21 +46,35 @@ namespace MotionController {
 
         for (int i = 0; i < maxSteps; ++i) {
             if (i < plan.stepsX) {
+                if (EndstopController::isTriggeredX()) {
+                    Serial.println("ENDSTOP X TRIEGGERED");
+                    break;
+                }
+
                 stepperX.step();
                 delayMicroseconds(plan.delayMicrosX);
             }
             if (i < plan.stepsY) {
+                if (EndstopController::isTriggeredY()) {
+                    Serial.println("ENDSTOP Y TRIEGGERED");
+                    break;
+                }
+
                 stepperY.step();
                 delayMicroseconds(plan.delayMicrosY);
             }
             if (i < plan.stepsZ) {
+                if (EndstopController::isTriggeredZ()) {
+                    Serial.println("ENDSTOP Z TRIEGGERED");
+                    break;
+                }
+
                 stepperZ.step();
                 delayMicroseconds(plan.delayMicrosZ);
             }
         }
     }
-
-
+    
     void emergencyStop() {
         stepperX.enable(false);
         stepperY.enable(false);

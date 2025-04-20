@@ -3,35 +3,35 @@
 cmake_policy(SET CMP0009 NEW)
 
 # SRC_FILES at CMakeLists.txt:22 (file)
-file(GLOB_RECURSE NEW_GLOB LIST_DIRECTORIES false "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/include/**/*.hpp")
+file(GLOB_RECURSE NEW_GLOB LIST_DIRECTORIES false "D:/Progetti/Arduino/3D-Printer-Firmware/include/**/*.hpp")
 set(OLD_GLOB
   )
 if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
   message("-- GLOB mismatch!")
-  file(TOUCH_NOCREATE "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/cmake.verify_globs")
+  file(TOUCH_NOCREATE "D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/cmake.verify_globs")
 endif()
 
 # SRC_FILES at CMakeLists.txt:22 (file)
-file(GLOB_RECURSE NEW_GLOB LIST_DIRECTORIES false "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/*.cpp")
+file(GLOB_RECURSE NEW_GLOB LIST_DIRECTORIES false "D:/Progetti/Arduino/3D-Printer-Firmware/src/*.cpp")
 set(OLD_GLOB
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/Application.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/CommandDispatcher.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/CommandHistory.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/SafetyManager.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/SerialCommandReceiver.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/StateMachine.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/WatchdogHandler.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/controllers/EndstopController.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/controllers/FanController.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/controllers/HistoryController.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/controllers/MotionController.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/controllers/SystemController.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/controllers/TempController.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/hal/arduino/ArduinoHAL.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/hal/drivers/stepper/A4988Stepper.cpp"
-  "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/src/motion/MotionPlanner.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/Application.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/CommandDispatcher.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/CommandHistory.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/SafetyManager.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/SerialCommandReceiver.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/StateMachine.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/WatchdogHandler.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/EndstopController.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/FanController.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/HistoryController.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/MotionController.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/SystemController.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/TempController.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/hal/arduino/ArduinoHAL.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/hal/drivers/stepper/A4988Stepper.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/motion/MotionPlanner.cpp"
   )
 if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
   message("-- GLOB mismatch!")
-  file(TOUCH_NOCREATE "C:/Users/Andrea/Desktop/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/cmake.verify_globs")
+  file(TOUCH_NOCREATE "D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/cmake.verify_globs")
 endif()

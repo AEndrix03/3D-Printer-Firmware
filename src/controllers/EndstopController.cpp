@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "../include/controllers/EndstopController.hpp"
 #include "../include/Pins.hpp"
+#include "../include/endstop/EndstopConfig.hpp"
 
 namespace EndstopController {
 
@@ -22,14 +23,18 @@ namespace EndstopController {
     }
 
     bool isTriggeredX() {
-        return digitalRead(PIN_ENDSTOP_X) == LOW;
+        bool raw = digitalRead(PIN_ENDSTOP_X);
+        return EndstopConfig::ENDSTOP_INVERTED_X ? (raw == HIGH) : (raw == LOW);
     }
 
+
     bool isTriggeredY() {
-        return digitalRead(PIN_ENDSTOP_Y) == LOW;
+        bool raw = digitalRead(PIN_ENDSTOP_Y);
+        return EndstopConfig::ENDSTOP_INVERTED_Y ? (raw == HIGH) : (raw == LOW);
     }
 
     bool isTriggeredZ() {
-        return digitalRead(PIN_ENDSTOP_Z) == LOW;
+        bool raw = digitalRead(PIN_ENDSTOP_Z);
+        return EndstopConfig::ENDSTOP_INVERTED_Z ? (raw == HIGH) : (raw == LOW);
     }
 }
