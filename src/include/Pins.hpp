@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <Arduino.h>
 
 // Motori
 constexpr uint8_t PIN_X_STEP = 2;

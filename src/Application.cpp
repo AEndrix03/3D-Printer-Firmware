@@ -12,6 +12,7 @@
 #include "./include/controllers/FanController.hpp"
 #include "./include/controllers/EndstopController.hpp"
 #include "./include/controllers/SystemController.hpp"
+#include "./include/controllers/ExtruderController.hpp"
 
 // Config
 #include "./include/Config.hpp"
@@ -29,6 +30,7 @@ void Application::init() {
 
     // Inizializzazione hardware/controller
     MotionController::init();
+    ExtruderController::init();
     TempController::init();
     FanController::init();
     EndstopController::init();

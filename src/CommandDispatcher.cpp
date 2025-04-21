@@ -6,11 +6,15 @@
 #include "./include/controllers/SystemController.hpp"
 #include "./include/controllers/EndstopController.hpp"
 #include "./include/controllers/HistoryController.hpp"
+#include "./include/controllers/ExtruderController.hpp"
 
 void CommandDispatcher::dispatch(const ParsedCommand &cmd) {
     switch (cmd.category) {
         case 'M':
             MotionController::handle(cmd.code, cmd.params);
+            break;
+        case 'A':
+            ExtruderController::handle(cmd.code, cmd.params);
             break;
         case 'T':
             TempController::handle(cmd.code, cmd.params);
