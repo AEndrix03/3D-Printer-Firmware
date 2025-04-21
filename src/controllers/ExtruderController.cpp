@@ -9,7 +9,10 @@
 
 namespace {
     A4988Stepper stepperE(PIN_E_STEP, PIN_E_DIR);
+    float currentPositionE = 0.0f;
+    float stepsPerMm = ExtruderConfig::STEPS_PER_MM_E;
 }
+
 
 namespace ExtruderController {
     void init() {
@@ -40,6 +43,43 @@ namespace ExtruderController {
         }
     }
 
+    void retract(float mm, float feedrate) {
+        move(-fabs(mm), feedrate);
+        currentPositionE -= fabs(mm);
+    }
+
+    void purge(float mm, float feedrate) {
+        move(fabs(mm), feedrate);
+        currentPositionE += fabs(mm);
+    }
+
+    void stepManual(int steps, bool direction) {
+        Serial.print(F("STEP MANUAL: "));
+        Serial.print(steps);
+        Serial.print(F(" steps "));
+        Serial.println(direction ? F("FORWARD") : F("BACKWARD"));
+
+        stepperE.setDirection(direction);
+        for (int i = 0; i < steps; ++i) {
+            stepperE.step();
+            delayMicroseconds(200);
+        }
+
+        if (direction) currentPositionE += steps / stepsPerMm;
+        else currentPositionE -= steps / stepsPerMm;
+    }
+
+    void resetPosition() {
+        currentPositionE = 0.0f;
+        Serial.println(F("Extruder position reset to 0.0"));
+    }
+
+    void setStepsPerMM(float newSteps) {
+        stepsPerMm = newSteps;
+        Serial.print(F("Steps per mm updated: "));
+        Serial.println(stepsPerMm);
+    }
+
     void handle(int code, const char *params) {
         switch (code) {
             case 10: { // A10 E10.0 F800
@@ -51,6 +91,46 @@ namespace ExtruderController {
 
                 move(mm, feedrate);
 
+                break;
+            }
+            case 11: { // A11 E2.0 F1800 = retract
+                float mm = 2.0f, feedrate = 1800.0f;
+                const char *pe = strchr(params, 'E');
+                const char *pf = strchr(params, 'F');
+                if (pe) mm = atof(pe + 1);
+                if (pf) feedrate = atof(pf + 1);
+                retract(mm, feedrate);
+                break;
+            }
+            case 12: { // A12 E5.0 F1000 = purge
+                float mm = 5.0f, feedrate = 1000.0f;
+                const char *pe = strchr(params, 'E');
+                const char *pf = strchr(params, 'F');
+                if (pe) mm = atof(pe + 1);
+                if (pf) feedrate = atof(pf + 1);
+                purge(mm, feedrate);
+                break;
+            }
+            case 13: { // A13 S200 D1 = manual step
+                int steps = 100;
+                bool dir = true;
+                const char *ps = strchr(params, 'S');
+                const char *pd = strchr(params, 'D');
+                if (ps) steps = atoi(ps + 1);
+                if (pd) dir = atoi(pd + 1) != 0;
+                stepManual(steps, dir);
+                break;
+            }
+            case 14: { // A14 = reset pos
+                resetPosition();
+                break;
+            }
+            case 15: { // A15 S95.2 = set steps/mm
+                const char *ps = strchr(params, 'S');
+                if (ps) {
+                    float val = atof(ps + 1);
+                    setStepsPerMM(val);
+                }
                 break;
             }
             case 0: {
