@@ -4,7 +4,7 @@ setlocal
 rem === Configurazione ===
 set "ARDUINO_CLI=arduino-cli"
 set "BOARD=arduino:avr:uno"
-set "PORT=COM5"
+set "PORT=COM3"
 set "PROJECT_DIR=%~dp0"
 set "PROJECT_DIR=%PROJECT_DIR:~0,-1%"
 

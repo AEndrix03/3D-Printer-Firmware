@@ -4,17 +4,19 @@
 A4988Stepper::A4988Stepper(uint8_t stepPin, uint8_t dirPin, uint8_t enPin)
         : _step(stepPin), _dir(dirPin), _en(enPin) {}
 
-void A4988Stepper::init() {
+void A4988Stepper::init(bool inverted) {
     pinMode(_step, OUTPUT);
     pinMode(_dir, OUTPUT);
     if (_en != 255) {
         pinMode(_en, OUTPUT);
-        digitalWrite(_en, LOW); // abilita motore
+        digitalWrite(_en, LOW);
     }
+
+    _inv = inverted;
 }
 
 void A4988Stepper::setDirection(bool dir) {
-    digitalWrite(_dir, dir ? HIGH : LOW);
+    digitalWrite(_dir, dir && !_inv ? HIGH : LOW);
 }
 
 void A4988Stepper::step() {

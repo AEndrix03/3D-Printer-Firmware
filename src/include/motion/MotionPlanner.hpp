@@ -8,4 +8,6 @@ struct MotionPlan {
     unsigned int delayMicrosX, delayMicrosY, delayMicrosZ;
 };
 
+unsigned int computeDelayMicros(float feedrate, float minRate, float maxRate);
+
 MotionPlan planMotion(const MotionCommand &cmd);

@@ -2,7 +2,7 @@
 #include "../include/motion/MotionConfig.hpp"
 #include <math.h>
 
-static unsigned int computeDelayMicros(float feedrate, float minRate, float maxRate) {
+unsigned int computeDelayMicros(float feedrate, float minRate, float maxRate) {
     float factor = feedrate / 10000.0f;
     if (factor > 1.0f) factor = 1.0f;
     if (factor < 0.0f) factor = 0.0f;

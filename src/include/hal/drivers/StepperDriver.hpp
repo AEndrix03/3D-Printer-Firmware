@@ -4,9 +4,10 @@
 
 class StepperDriver {
 public:
-    virtual void init() = 0;
+    virtual void init(bool inverted) = 0;
 
-    virtual void setDirection(bool dir) = 0;     // true = avanti, false = indietro
+    virtual void setDirection(bool dir) = 0;
+
     virtual void step() = 0;
 
     virtual void enable(bool on) = 0;
