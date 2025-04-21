@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 
 :: CONFIGURAZIONE PORTA
 set "PORT=COM3"
-set "BAUD=19200"
+set "BAUD=115200"
 
 :: File temporaneo per lo script PowerShell
 set "TMPFILE=%TEMP%\send_serial_cmd.ps1"

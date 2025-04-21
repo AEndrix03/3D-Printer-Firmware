@@ -18,7 +18,7 @@
 #include "./include/Config.hpp"
 
 void Application::init() {
-    Serial.begin(19200);
+    Serial.begin(115200);
     while (!Serial); // attende la seriale solo su USB native
 
     Serial.println(F("Avvio firmware 3DP..."));

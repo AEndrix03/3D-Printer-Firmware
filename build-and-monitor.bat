@@ -6,7 +6,7 @@ set BOARD=arduino:avr:uno
 set PORT=COM3
 set PROJECT_DIR=%~dp0
 set PROJECT_DIR=%PROJECT_DIR:~0,-1%
-set BAUD=19200
+set BAUD=115200
 
 echo [INFO] Compilazione...
 %ARDUINO_CLI% compile --fqbn %BOARD% "%PROJECT_DIR%" || goto :error
