@@ -13,7 +13,6 @@ namespace {
 }
 
 namespace SafetyManager {
-
     void init() {
         lastCommandTime = millis();
     }
@@ -47,7 +46,7 @@ namespace SafetyManager {
     }
 
     bool isAnyEndstopTriggered() {
-        return StateMachine::getState() == MachineState::Printing && EndstopController::isAnyTriggered();
+        return EndstopController::isAnyTriggered();
     }
 
     void emergencyStop(const char *reason) {
@@ -57,5 +56,4 @@ namespace SafetyManager {
         digitalWrite(PIN_HEATER, LOW); // ora è visibile
         StateMachine::setState(MachineState::Error);
     }
-
 }

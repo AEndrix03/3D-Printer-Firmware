@@ -116,18 +116,21 @@ namespace MotionController {
                 if (pa) {
                     diagnoseAxis(stepperX, EndstopController::isTriggeredX,
                                  HomingConfig::HOMING_X_BOUNCE_OFFSET,
+                                 MotionConfig::STEPS_PER_MM_X,
                                  feedrate,
                                  MotionConfig::MIN_FEEDRATE_X,
                                  MotionConfig::MAX_FEEDRATE_X);
                 } else if (pb) {
                     diagnoseAxis(stepperY, EndstopController::isTriggeredY,
                                  HomingConfig::HOMING_Y_BOUNCE_OFFSET,
+                                 MotionConfig::STEPS_PER_MM_Y,
                                  feedrate,
                                  MotionConfig::MIN_FEEDRATE_Y,
                                  MotionConfig::MAX_FEEDRATE_Y);
                 } else if (pc) {
                     diagnoseAxis(stepperZ, EndstopController::isTriggeredZ,
                                  HomingConfig::HOMING_Z_BOUNCE_OFFSET,
+                                 MotionConfig::STEPS_PER_MM_Z,
                                  feedrate,
                                  MotionConfig::MIN_FEEDRATE_Z,
                                  MotionConfig::MAX_FEEDRATE_Z);
@@ -147,7 +150,8 @@ namespace MotionController {
         }
     }
 
-    void homeAxis(A4988Stepper &stepper, bool (*isTriggered)(), float feedrate, float minRate, float maxRate) {
+    void homeAxis(A4988Stepper &stepper, bool (*isTriggered)(), float speedPerMm, float feedrate, float minRate,
+                  float maxRate) {
         if (isTriggered()) {
             Serial.println(F("ENDSTOP ALREADY TRIGGERED"));
             return;
@@ -160,7 +164,7 @@ namespace MotionController {
 
         while (!isTriggered() && steps < timeoutSteps) {
             stepper.step();
-            delayMicroseconds(computeDelayMicros(feedrate, minRate, maxRate));
+            delayMicroseconds(computeDelayMicros(feedrate, speedPerMm, minRate, maxRate));
             steps++;
         }
 
@@ -182,15 +186,18 @@ namespace MotionController {
         REQUIRE_STATE(MachineState::Homing);
 
         Serial.println(F("HOMING X..."));
-        homeAxis(stepperX, EndstopController::isTriggeredX, HomingConfig::HOMING_X_FEEDRATE,
+        homeAxis(stepperX, EndstopController::isTriggeredX, MotionConfig::STEPS_PER_MM_X,
+                 HomingConfig::HOMING_X_FEEDRATE,
                  MotionConfig::MIN_FEEDRATE_X, MotionConfig::MAX_FEEDRATE_X);
 
         Serial.println(F("HOMING Y..."));
-        homeAxis(stepperY, EndstopController::isTriggeredY, HomingConfig::HOMING_Y_FEEDRATE,
+        homeAxis(stepperY, EndstopController::isTriggeredY, MotionConfig::STEPS_PER_MM_Y,
+                 HomingConfig::HOMING_Y_FEEDRATE,
                  MotionConfig::MIN_FEEDRATE_Y, MotionConfig::MAX_FEEDRATE_Y);
 
         Serial.println(F("HOMING Z..."));
-        homeAxis(stepperZ, EndstopController::isTriggeredZ, HomingConfig::HOMING_Z_FEEDRATE,
+        homeAxis(stepperZ, EndstopController::isTriggeredZ, MotionConfig::STEPS_PER_MM_Z,
+                 HomingConfig::HOMING_Z_FEEDRATE,
                  MotionConfig::MIN_FEEDRATE_Z, MotionConfig::MAX_FEEDRATE_Z);
 
         releaseFromEndstops(true);
@@ -198,9 +205,10 @@ namespace MotionController {
         Serial.println(F("HOMING COMPLETE"));
     }
 
-    void diagnoseAxis(A4988Stepper &stepper, bool (*isTriggered)(), int bounceSteps, float feedrate, float minRate,
+    void diagnoseAxis(A4988Stepper &stepper, bool (*isTriggered)(), float stepsPerMm, int bounceSteps, float feedrate,
+                      float minRate,
                       float maxRate) {
-        const float delayMicros = computeDelayMicros(feedrate, minRate, maxRate);
+        const float delayMicros = computeDelayMicros(feedrate, stepsPerMm, minRate, maxRate);
         Serial.println(F("Diagnosing axis..."));
 
         // SALITA (verso endstop)
@@ -243,6 +251,4 @@ namespace MotionController {
 
         Serial.println(F("Diagnosis complete"));
     }
-
-
 }

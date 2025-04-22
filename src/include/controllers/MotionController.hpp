@@ -6,7 +6,6 @@
  * @brief Gestisce i movimenti della macchina lungo gli assi XYZ.
  */
 namespace MotionController {
-
     /**
      * @brief Inizializza eventuali driver drivers e limiti.
      */
@@ -37,11 +36,13 @@ namespace MotionController {
      * @brief Avvia il processo di homing per un certo asse
      * @param stepper Stepper dell'asse
      * @param isTriggered Trigger del finecorsa
+     * @param stepsPerMm Steps per millimetro
      * @param feedrate Velocità di movimento (mm/min)
      * @param minRate Minima velocità di movimento (mm/min)
      * @param maxRate Massima velocità di movimento (mm/min)
      */
-    void homeAxis(A4988Stepper &stepper, bool (*isTriggered)(), float feedrate, float minRate, float maxRate);
+    void homeAxis(A4988Stepper &stepper, bool (*isTriggered)(), float stepsPerMm, float feedrate, float minRate,
+                  float maxRate);
 
     /**
      * @brief Sposta i cursori fuori dall'area degli endstop.
@@ -57,11 +58,12 @@ namespace MotionController {
     /**
      * @brief Inizia la diagnosi di un asse, conta gli step effettuati in ogni direzione ad una certa velocità
      * @param stepper Stepper dell'asse
+     * @param stepsPerMm Step per millimetro
      * @param feedrate Velocità di movimento (mm/min)
      * @param minRate Minima velocità di movimento (mm/min)
      * @param maxRate Massima velocità di movimento (mm/min)
      */
-    void diagnoseAxis(A4988Stepper &stepper, bool (*isTriggered)(), int bounceSteps, float feedrate, float minRate,
+    void diagnoseAxis(A4988Stepper &stepper, bool (*isTriggered)(), float stepsPerMm, int bounceSteps, float feedrate,
+                      float minRate,
                       float maxRate);
-
 }

@@ -33,7 +33,7 @@ namespace ExtruderController {
         MotionPlan plan;
         plan.stepsX = (int) (fabs(mm) * ExtruderConfig::STEPS_PER_MM_E + 0.5f);
         plan.dirX = mm >= 0;
-        plan.delayMicrosX = computeDelayMicros(feedrate, ExtruderConfig::MIN_FEEDRATE_E,
+        plan.delayMicrosX = computeDelayMicros(feedrate, ExtruderConfig::STEPS_PER_MM_E, ExtruderConfig::MIN_FEEDRATE_E,
                                                ExtruderConfig::MAX_FEEDRATE_E);
 
         stepperE.setDirection(plan.dirX);
@@ -82,7 +82,8 @@ namespace ExtruderController {
 
     void handle(int code, const char *params) {
         switch (code) {
-            case 10: { // A10 E10.0 F800
+            case 10: {
+                // A10 E10.0 F800
                 float mm = 0.0f, feedrate = 1000.0f;
                 const char *pe = strchr(params, 'E');
                 const char *pf = strchr(params, 'F');
@@ -93,7 +94,8 @@ namespace ExtruderController {
 
                 break;
             }
-            case 11: { // A11 E2.0 F1800 = retract
+            case 11: {
+                // A11 E2.0 F1800 = retract
                 float mm = 2.0f, feedrate = 1800.0f;
                 const char *pe = strchr(params, 'E');
                 const char *pf = strchr(params, 'F');
@@ -102,7 +104,8 @@ namespace ExtruderController {
                 retract(mm, feedrate);
                 break;
             }
-            case 12: { // A12 E5.0 F1000 = purge
+            case 12: {
+                // A12 E5.0 F1000 = purge
                 float mm = 5.0f, feedrate = 1000.0f;
                 const char *pe = strchr(params, 'E');
                 const char *pf = strchr(params, 'F');
@@ -111,7 +114,8 @@ namespace ExtruderController {
                 purge(mm, feedrate);
                 break;
             }
-            case 13: { // A13 S200 D1 = manual step
+            case 13: {
+                // A13 S200 D1 = manual step
                 int steps = 100;
                 bool dir = true;
                 const char *ps = strchr(params, 'S');
@@ -121,11 +125,13 @@ namespace ExtruderController {
                 stepManual(steps, dir);
                 break;
             }
-            case 14: { // A14 = reset pos
+            case 14: {
+                // A14 = reset pos
                 resetPosition();
                 break;
             }
-            case 15: { // A15 S95.2 = set steps/mm
+            case 15: {
+                // A15 S95.2 = set steps/mm
                 const char *ps = strchr(params, 'S');
                 if (ps) {
                     float val = atof(ps + 1);
