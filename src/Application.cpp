@@ -15,6 +15,8 @@
 #include "./include/controllers/ExtruderController.hpp"
 
 // Config
+#include <avr/wdt.h>
+
 #include "./include/Config.hpp"
 
 void Application::init() {
@@ -37,11 +39,14 @@ void Application::init() {
 
     TempController::enableMonitoring(TEMP_MONITORING_ENABLED);
 
+    MCUSR &= ~(1 << WDRF);
+    wdt_disable();
+
     Serial.println(F("Sistema pronto."));
 }
 
 void Application::loop() {
-    WatchdogHandler::reset();               // evita reset da watchdog
-    SerialCommandReceiver::update();        // leggi comandi seriali
-    SafetyManager::update();                // controlla timeout e sicurezza
+    WatchdogHandler::reset(); // evita reset da watchdog
+    SerialCommandReceiver::update(); // leggi comandi seriali
+    SafetyManager::update(); // controlla timeout e sicurezza
 }

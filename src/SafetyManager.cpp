@@ -2,10 +2,9 @@
 #include "./include/SafetyManager.hpp"
 #include "./include/controllers/TempController.hpp"
 #include "./include/controllers/MotionController.hpp"
+#include "./include/controllers/EndstopController.hpp"
 #include "./include/StateMachine.hpp"
 #include "./include/Pins.hpp"
-#include "./include/controllers/EndstopController.hpp"
-
 
 namespace {
     unsigned long lastCommandTime = 0;
@@ -28,6 +27,7 @@ namespace SafetyManager {
 
         if (isAnyEndstopTriggered()) {
             emergencyStop("ENDSTOP TRIGGERED DURING PRINTING PHASE");
+            EndstopController::handle(10, nullptr);
         }
     }
 
@@ -46,7 +46,7 @@ namespace SafetyManager {
     }
 
     bool isAnyEndstopTriggered() {
-        return EndstopController::isAnyTriggered();
+        return StateMachine::getState() == MachineState::Printing && EndstopController::isAnyTriggered();
     }
 
     void emergencyStop(const char *reason) {

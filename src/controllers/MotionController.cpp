@@ -1,10 +1,14 @@
 #include <Arduino.h>
 
 #include "../include/controllers/MotionController.hpp"
+
+#include <avr/wdt.h>
+
 #include "../include/controllers/EndstopController.hpp"
 #include "../include/StateMachine.hpp"
 
 #include "../include/Pins.hpp"
+#include "../include/SafetyManager.hpp"
 #include "../include/motion/MotionConfig.hpp"
 #include "../include/motion/HomingConfig.hpp"
 #include "../include/hal/drivers/StepperConfig.hpp"
@@ -12,6 +16,7 @@
 #include "../include/motion/MotionPlanner.hpp"
 
 #define REQUIRE_STATE(validState) if (StateMachine::getState() != validState) { Serial.println(F("INVALID STATE")); return; }
+#define CHUNK_SIZE 64
 
 namespace {
     A4988Stepper stepperX(PIN_X_STEP, PIN_X_DIR);
@@ -30,15 +35,6 @@ namespace MotionController {
     }
 
     void moveTo(float x, float y, float z, float f) {
-        Serial.print(F("MOVE to X="));
-        Serial.print(x);
-        Serial.print(F(" Y="));
-        Serial.print(y);
-        Serial.print(F(" Z="));
-        Serial.print(z);
-        Serial.print(F(" F="));
-        Serial.println(f);
-
         MotionCommand cmd = {x, y, z, f};
         MotionPlan plan = planMotion(cmd);
 
@@ -51,32 +47,29 @@ namespace MotionController {
         if (plan.stepsZ > maxSteps) maxSteps = plan.stepsZ;
 
         for (int i = 0; i < maxSteps; ++i) {
+            /* ---- asse X ---- */
             if (i < plan.stepsX) {
-                if (EndstopController::isTriggeredX()) {
-                    Serial.println("ENDSTOP X TRIEGGERED");
-                    break;
-                }
-
+                if (EndstopController::isTriggeredX()) break;
                 stepperX.step();
                 delayMicroseconds(plan.delayMicrosX);
             }
+            /* ---- asse Y ---- */
             if (i < plan.stepsY) {
-                if (EndstopController::isTriggeredY()) {
-                    Serial.println("ENDSTOP Y TRIEGGERED");
-                    break;
-                }
-
+                if (EndstopController::isTriggeredY()) break;
                 stepperY.step();
                 delayMicroseconds(plan.delayMicrosY);
             }
+            /* ---- asse Z ---- */
             if (i < plan.stepsZ) {
-                if (EndstopController::isTriggeredZ()) {
-                    Serial.println("ENDSTOP Z TRIEGGERED");
-                    break;
-                }
-
+                if (EndstopController::isTriggeredZ()) break;
                 stepperZ.step();
                 delayMicroseconds(plan.delayMicrosZ);
+            }
+
+            /* ---- Refresh wathdog & machine state ---- */
+            if ((i & (CHUNK_SIZE - 1)) == 0) {
+                wdt_reset();
+                SafetyManager::update();
             }
         }
     }
