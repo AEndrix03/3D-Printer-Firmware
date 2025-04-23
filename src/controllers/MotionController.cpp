@@ -151,11 +151,14 @@ namespace MotionController {
         }
 
         stepper.setDirection(false);
-
-        int timeoutSteps = HomingConfig::HOMING_BOUNCE_FEEDRATE;
+        int bouceSteps = HomingConfig::HOMING_BOUNCE_FEEDRATE;
         int steps = 0;
 
-        while (!isTriggered() && steps < timeoutSteps) {
+        while (!isTriggered()) {
+            if ((steps & (CHUNK_SIZE - 1)) == 0) {
+                wdt_reset();
+                SafetyManager::update();
+            }
             stepper.step();
             delayMicroseconds(computeDelayMicros(feedrate, speedPerMm, minRate, maxRate));
             steps++;
@@ -163,8 +166,19 @@ namespace MotionController {
 
         if (isTriggered()) {
             Serial.println(F("ENDSTOP HIT"));
-        } else {
-            Serial.println(F("HOMING TIMEOUT"));
+        }
+
+        steps = 0;
+        stepper.setDirection(true);
+        while (steps < bouceSteps) {
+            if ((steps & (CHUNK_SIZE - 1)) == 0) {
+                wdt_reset();
+                SafetyManager::update();
+            }
+
+            stepper.step();
+            delayMicroseconds(computeDelayMicros(feedrate, speedPerMm, minRate, maxRate));
+            steps++;
         }
     }
 
@@ -192,8 +206,6 @@ namespace MotionController {
         homeAxis(stepperZ, EndstopController::isTriggeredZ, MotionConfig::STEPS_PER_MM_Z,
                  HomingConfig::HOMING_Z_FEEDRATE,
                  MotionConfig::MIN_FEEDRATE_Z, MotionConfig::MAX_FEEDRATE_Z);
-
-        releaseFromEndstops(true);
 
         Serial.println(F("HOMING COMPLETE"));
     }

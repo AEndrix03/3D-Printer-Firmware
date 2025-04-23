@@ -2,7 +2,8 @@
 #include "./../../../include/hal/drivers/stepper/A4988Stepper.hpp"
 
 A4988Stepper::A4988Stepper(uint8_t stepPin, uint8_t dirPin, uint8_t enPin)
-        : _step(stepPin), _dir(dirPin), _en(enPin) {}
+    : _step(stepPin), _dir(dirPin), _en(enPin) {
+}
 
 void A4988Stepper::init(bool inverted) {
     pinMode(_step, OUTPUT);
@@ -16,7 +17,8 @@ void A4988Stepper::init(bool inverted) {
 }
 
 void A4988Stepper::setDirection(bool dir) {
-    digitalWrite(_dir, dir && !_inv ? HIGH : LOW);
+    dir = _inv ? !dir : dir;
+    digitalWrite(_dir, dir ? HIGH : LOW);
 }
 
 void A4988Stepper::step() {

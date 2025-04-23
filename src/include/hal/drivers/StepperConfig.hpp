@@ -6,9 +6,9 @@ namespace StepperConfig {
     constexpr bool STEPPER_ENABLE_Z = true;
     constexpr bool STEPPER_ENABLE_E = true;
 
-    constexpr bool STEPPER_INVERT_X = false;
+    constexpr bool STEPPER_INVERT_X = true;
     constexpr bool STEPPER_INVERT_Y = false;
-    constexpr bool STEPPER_INVERT_Z = false;
+    constexpr bool STEPPER_INVERT_Z = true;
     constexpr bool STEPPER_INVERT_E = false;
 }
 
