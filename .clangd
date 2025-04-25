@@ -1,0 +1,13 @@
+CompileFlags:
+  Add: [
+    "-x", "c++",
+    "-std=c++14",
+    "-DARDUINO=10805",
+    "-DARDUINO_AVR_UNO",
+    "-DF_CPU=16000000L",
+    "-D__AVR__",
+    "-mmcu=atmega328p",
+    "-I", "C:/Users/redeg/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.6/cores/arduino",
+    "-I", "C:/Users/redeg/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.6/variants/standard",
+    "-I", "C:/Users/redeg/AppData/Local/Arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/avr/include"
+  ]
