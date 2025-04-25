@@ -61,7 +61,7 @@ comandi ottimizzati, risultando in movimenti più fluidi e precisi rispetto ai f
 │           └── EndstopController(E)
 │
 ├── 🧾 CommandQueue (opzionale)
-│     └── Buffer FIFO (3–5 comandi) con priorità emergenza
+│     └── Buffer FIFO (4 comandi) con priorità emergenza. Il numero di comandi è configurabile.
 │
 ├── 📊 StateMachine
 │     ├── Idle / Printing / Error / Homing / Paused
@@ -120,7 +120,11 @@ comandi ottimizzati, risultando in movimenti più fluidi e precisi rispetto ai f
 - Computer host (PC, Raspberry Pi o altro)
 - Hardware stampante 3D (motori stepper, driver, endstop, etc.)
 - Arduino IDE (versione 1.8.x o superiore)
+  <<<<<<< HEAD
+  =======
 - [Librerie necessarie](#librerie-richieste)
+
+> > > > > > > origin/master
 
 ### Installazione Firmware
 
@@ -134,6 +138,8 @@ comandi ottimizzati, risultando in movimenti più fluidi e precisi rispetto ai f
 3. Configura i parametri della tua stampante nel file `Configuration.h`
 
 4. Compila e carica il firmware sulla tua scheda Arduino UNO
+   <<<<<<< HEAD
+   =======
 
 ### Configurazione Host
 
@@ -152,6 +158,9 @@ comandi ottimizzati, risultando in movimenti più fluidi e precisi rispetto ai f
 4. Esegui il software host:
    ```bash
    python host_controller.py
+
+> > > > > > > origin/master
+
    ```
 
 ## 📚 Documentazione
@@ -159,12 +168,15 @@ comandi ottimizzati, risultando in movimenti più fluidi e precisi rispetto ai f
 La documentazione dettagliata è disponibile
 nella [wiki del progetto](https://github.com/yourusername/3D-Printer-Firmware/wiki).
 
+<<<<<<< HEAD
+=======
 ### Librerie Richieste
 
 - AccelStepper (per il controllo dei motori)
 - PID Library (per il controllo della temperatura)
 - [Altre librerie specifiche]
 
+>>>>>>> origin/master
 ## 📝 Protocollo di Comunicazione
 
 Il firmware utilizza un protocollo seriale personalizzato con le seguenti caratteristiche:
@@ -178,7 +190,9 @@ Il firmware utilizza un protocollo seriale personalizzato con le seguenti caratt
 Esempio di comando:
 
 ```
+
 N123 M10 X100.5 Y200.3 F3000 *35
+
 ```
 
 ## 🔧 Personalizzazione
@@ -215,20 +229,9 @@ Per favore, consulta il file [CONTRIBUTING.md](CONTRIBUTING.md) per maggiori det
 - [ ] Supporto multi-estrusore
 - [ ] Autocalibrazione del piano
 
-## 📄 Licenza
-
-Questo progetto è rilasciato sotto la licenza MIT. Vedi il file [LICENSE](LICENSE) per maggiori dettagli.
-
 ## 👥 Team
 
-- [Nome Sviluppatore] - *Sviluppatore principale* - [GitHub](https://github.com/username)
-- [Altri contributori]
-
-## 🙏 Ringraziamenti
-
-- [Nome] per [contributo]
-- La comunità di Arduino e stampa 3D per ispirazione e feedback
-- Tutti i contributori che hanno aiutato a migliorare questo progetto
+- Andrea Redegalli - *Sviluppatore principale* - [GitHub](https://github.com/AEndrix03)
 
 ---
 
