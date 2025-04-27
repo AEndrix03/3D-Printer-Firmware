@@ -19,6 +19,8 @@
 
 #include "./include/Config.hpp"
 
+#include "./include/BusyHandler.hpp"
+
 void Application::init() {
     Serial.begin(115200);
     while (!Serial); // attende la seriale solo su USB native
@@ -49,4 +51,5 @@ void Application::loop() {
     WatchdogHandler::reset(); // evita reset da watchdog
     SerialCommandReceiver::update(); // leggi comandi seriali
     SafetyManager::update(); // controlla timeout e sicurezza
+    BusyHandler::update(); // Aggiorna lo stato BUSY, se necessario
 }

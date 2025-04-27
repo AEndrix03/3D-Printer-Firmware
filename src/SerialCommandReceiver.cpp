@@ -4,6 +4,7 @@
 #include "./include/CommandDispatcher.hpp"
 #include "./include/CommandHistory.hpp"
 #include "./include/SafetyManager.hpp"
+#include "./include/BusyHandler.hpp"
 
 uint16_t SerialCommandReceiver::lastCommandNumber = 0;
 
@@ -98,7 +99,9 @@ void SerialCommandReceiver::update() {
                 } else {
                     lastCommandNumber = cmd.number;
                     SafetyManager::notifyCommandReceived();
+                    BusyHandler::start();
                     CommandDispatcher::dispatch(cmd);
+                    BusyHandler::stop();
                     CommandHistory::store(cmd.number, inputBuffer);
                     Serial.print(F("OK N"));
                     Serial.println(cmd.number);
