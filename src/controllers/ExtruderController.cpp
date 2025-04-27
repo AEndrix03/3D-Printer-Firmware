@@ -4,6 +4,7 @@
 #include "../include/Pins.hpp"
 #include "../include/motion/MotionPlanner.hpp"
 #include "../include/extruder/ExtruderConfig.hpp"
+#include "../include/BusyHandler.hpp"
 #include <math.h>
 #include <Arduino.h>
 
@@ -38,6 +39,7 @@ namespace ExtruderController {
 
         stepperE.setDirection(plan.dirX);
         for (int i = 0; i < plan.stepsX; ++i) {
+            BusyHandler::update();
             stepperE.step();
             delayMicroseconds(plan.delayMicrosX);
         }
@@ -61,6 +63,7 @@ namespace ExtruderController {
 
         stepperE.setDirection(direction);
         for (int i = 0; i < steps; ++i) {
+            BusyHandler::update();
             stepperE.step();
             delayMicroseconds(200);
         }

@@ -14,6 +14,7 @@
 #include "../include/hal/drivers/StepperConfig.hpp"
 #include "../include/hal/drivers/stepper/A4988Stepper.hpp"
 #include "../include/motion/MotionPlanner.hpp"
+#include "../include/BusyHandler.hpp"
 
 #define REQUIRE_STATE(validState) if (StateMachine::getState() != validState) { Serial.println(F("INVALID STATE")); return; }
 #define CHUNK_SIZE 64
@@ -47,6 +48,8 @@ namespace MotionController {
         if (plan.stepsZ > maxSteps) maxSteps = plan.stepsZ;
 
         for (int i = 0; i < maxSteps; ++i) {
+            BusyHandler::update();
+
             /* ---- asse X ---- */
             if (i < plan.stepsX) {
                 if (EndstopController::isTriggeredX()) break;
@@ -155,6 +158,7 @@ namespace MotionController {
         int steps = 0;
 
         while (!isTriggered()) {
+            BusyHandler::update();
             if ((steps & (CHUNK_SIZE - 1)) == 0) {
                 wdt_reset();
                 SafetyManager::update();
@@ -171,6 +175,7 @@ namespace MotionController {
         steps = 0;
         stepper.setDirection(true);
         while (steps < bouceSteps) {
+            BusyHandler::update();
             if ((steps & (CHUNK_SIZE - 1)) == 0) {
                 wdt_reset();
                 SafetyManager::update();
@@ -220,6 +225,7 @@ namespace MotionController {
         stepper.setDirection(true);
         int upSteps = 0;
         while (!isTriggered() && upSteps < 50000) {
+            BusyHandler::update();
             stepper.step();
             delayMicroseconds(delayMicros);
             upSteps++;
@@ -231,6 +237,7 @@ namespace MotionController {
         delay(200);
         stepper.setDirection(false);
         for (int i = 0; i < bounceSteps; ++i) {
+            BusyHandler::update();
             stepper.step();
             delayMicroseconds(delayMicros);
         }
@@ -238,6 +245,7 @@ namespace MotionController {
 
         int downSteps = 0;
         while (!isTriggered() && downSteps < 50000) {
+            BusyHandler::update();
             stepper.step();
             delayMicroseconds(delayMicros);
             downSteps++;
@@ -246,6 +254,7 @@ namespace MotionController {
         delay(200);
         stepper.setDirection(true);
         for (int i = 0; i < bounceSteps; ++i) {
+            BusyHandler::update();
             stepper.step();
             delayMicroseconds(delayMicros);
         }
