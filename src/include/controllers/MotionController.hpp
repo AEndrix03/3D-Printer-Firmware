@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../hal/drivers/stepper/A4988Stepper.hpp"
+#include "../motion/Position.hpp"
 
 /**
  * @brief Gestisce i movimenti della macchina lungo gli assi XYZ.
@@ -25,7 +26,9 @@ namespace MotionController {
      * @param z Coordinata Z (mm)
      * @param f Velocità di movimento (feedrate, mm/min)
      */
-    void moveTo(float x, float y, float f);
+    void moveTo(float x, float y, float z, float f);
+
+    void goTo(int32_t targetX, int32_t targetY, int32_t targetZ, float feedrate);
 
     /**
      * @brief Arresta immediatamente tutti i movimenti.
@@ -42,7 +45,7 @@ namespace MotionController {
      * @param maxRate Massima velocità di movimento (mm/min)
      */
     void homeAxis(A4988Stepper &stepper, bool (*isTriggered)(), float stepsPerMm, float feedrate, float minRate,
-                  float maxRate);
+                  float maxRate, int32_t *positionTarget);
 
     /**
      * @brief Sposta i cursori fuori dall'area degli endstop.
@@ -66,4 +69,10 @@ namespace MotionController {
     void diagnoseAxis(A4988Stepper &stepper, bool (*isTriggered)(), float stepsPerMm, int bounceSteps, float feedrate,
                       float minRate,
                       float maxRate);
+
+    position::Position getPosition();
+
+    void setPosition(const position::Position &newPosition);
+
+    void zeroPosition();
 }

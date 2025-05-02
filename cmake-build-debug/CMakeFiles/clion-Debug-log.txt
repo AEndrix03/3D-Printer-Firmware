@@ -5,8 +5,8 @@
 -- Check for working CXX compiler: E:/Jetbrains/CLion 2025.1/bin/mingw/bin/g++.exe - skipped
 -- Detecting CXX compile features
 -- Detecting CXX compile features - done
--- Configuring done (11.8s)
--- Generating done (0.0s)
+-- Configuring done (2.0s)
+-- Generating done (0.1s)
 CMake Warning:
   Manually-specified variables were not used by the project:
 

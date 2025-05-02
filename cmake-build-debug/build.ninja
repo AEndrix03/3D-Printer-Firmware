@@ -59,6 +59,16 @@ build CMakeFiles/3D-Printer-Firmware.dir/src/Application.cpp.obj: CXX_COMPILER__
   TARGET_COMPILE_PDB = CMakeFiles\3D-Printer-Firmware.dir\
   TARGET_PDB = 3D-Printer-Firmware.pdb
 
+build CMakeFiles/3D-Printer-Firmware.dir/src/BusyHandler.cpp.obj: CXX_COMPILER__3D-Printer-Firmware_unscanned_Debug D$:/Progetti/Arduino/3D-Printer-Firmware/src/BusyHandler.cpp || cmake_object_order_depends_target_3D-Printer-Firmware
+  DEFINES = -DARDUINO=10805 -DARDUINO_AVR_UNO -DF_CPU=16000000L -D__AVR__
+  DEP_FILE = CMakeFiles\3D-Printer-Firmware.dir\src\BusyHandler.cpp.obj.d
+  FLAGS = -g -std=gnu++14 -fdiagnostics-color=always   -mmcu=atmega328p
+  INCLUDES = -IC:/Users/Andrea/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.6/cores/arduino -IC:/Users/Andrea/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.6/variants/standard -IC:/Users/Andrea/AppData/Local/Arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/avr/include
+  OBJECT_DIR = CMakeFiles\3D-Printer-Firmware.dir
+  OBJECT_FILE_DIR = CMakeFiles\3D-Printer-Firmware.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\3D-Printer-Firmware.dir\
+  TARGET_PDB = 3D-Printer-Firmware.pdb
+
 build CMakeFiles/3D-Printer-Firmware.dir/src/CommandDispatcher.cpp.obj: CXX_COMPILER__3D-Printer-Firmware_unscanned_Debug D$:/Progetti/Arduino/3D-Printer-Firmware/src/CommandDispatcher.cpp || cmake_object_order_depends_target_3D-Printer-Firmware
   DEFINES = -DARDUINO=10805 -DARDUINO_AVR_UNO -DF_CPU=16000000L -D__AVR__
   DEP_FILE = CMakeFiles\3D-Printer-Firmware.dir\src\CommandDispatcher.cpp.obj.d
@@ -122,6 +132,16 @@ build CMakeFiles/3D-Printer-Firmware.dir/src/WatchdogHandler.cpp.obj: CXX_COMPIL
 build CMakeFiles/3D-Printer-Firmware.dir/src/controllers/EndstopController.cpp.obj: CXX_COMPILER__3D-Printer-Firmware_unscanned_Debug D$:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/EndstopController.cpp || cmake_object_order_depends_target_3D-Printer-Firmware
   DEFINES = -DARDUINO=10805 -DARDUINO_AVR_UNO -DF_CPU=16000000L -D__AVR__
   DEP_FILE = CMakeFiles\3D-Printer-Firmware.dir\src\controllers\EndstopController.cpp.obj.d
+  FLAGS = -g -std=gnu++14 -fdiagnostics-color=always   -mmcu=atmega328p
+  INCLUDES = -IC:/Users/Andrea/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.6/cores/arduino -IC:/Users/Andrea/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.6/variants/standard -IC:/Users/Andrea/AppData/Local/Arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/avr/include
+  OBJECT_DIR = CMakeFiles\3D-Printer-Firmware.dir
+  OBJECT_FILE_DIR = CMakeFiles\3D-Printer-Firmware.dir\src\controllers
+  TARGET_COMPILE_PDB = CMakeFiles\3D-Printer-Firmware.dir\
+  TARGET_PDB = 3D-Printer-Firmware.pdb
+
+build CMakeFiles/3D-Printer-Firmware.dir/src/controllers/ExtruderController.cpp.obj: CXX_COMPILER__3D-Printer-Firmware_unscanned_Debug D$:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/ExtruderController.cpp || cmake_object_order_depends_target_3D-Printer-Firmware
+  DEFINES = -DARDUINO=10805 -DARDUINO_AVR_UNO -DF_CPU=16000000L -D__AVR__
+  DEP_FILE = CMakeFiles\3D-Printer-Firmware.dir\src\controllers\ExtruderController.cpp.obj.d
   FLAGS = -g -std=gnu++14 -fdiagnostics-color=always   -mmcu=atmega328p
   INCLUDES = -IC:/Users/Andrea/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.6/cores/arduino -IC:/Users/Andrea/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.6/variants/standard -IC:/Users/Andrea/AppData/Local/Arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/avr/include
   OBJECT_DIR = CMakeFiles\3D-Printer-Firmware.dir
@@ -217,7 +237,7 @@ build CMakeFiles/3D-Printer-Firmware.dir/src/motion/MotionPlanner.cpp.obj: CXX_C
 #############################################
 # Link the executable 3D-Printer-Firmware.exe
 
-build 3D-Printer-Firmware.exe: CXX_EXECUTABLE_LINKER__3D-Printer-Firmware_Debug CMakeFiles/3D-Printer-Firmware.dir/src/Application.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/CommandDispatcher.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/CommandHistory.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/SafetyManager.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/SerialCommandReceiver.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/StateMachine.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/WatchdogHandler.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/controllers/EndstopController.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/controllers/FanController.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/controllers/HistoryController.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/controllers/MotionController.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/controllers/SystemController.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/controllers/TempController.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/hal/arduino/ArduinoHAL.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/hal/drivers/stepper/A4988Stepper.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/motion/MotionPlanner.cpp.obj
+build 3D-Printer-Firmware.exe: CXX_EXECUTABLE_LINKER__3D-Printer-Firmware_Debug CMakeFiles/3D-Printer-Firmware.dir/src/Application.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/BusyHandler.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/CommandDispatcher.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/CommandHistory.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/SafetyManager.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/SerialCommandReceiver.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/StateMachine.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/WatchdogHandler.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/controllers/EndstopController.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/controllers/ExtruderController.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/controllers/FanController.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/controllers/HistoryController.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/controllers/MotionController.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/controllers/SystemController.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/controllers/TempController.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/hal/arduino/ArduinoHAL.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/hal/drivers/stepper/A4988Stepper.cpp.obj CMakeFiles/3D-Printer-Firmware.dir/src/motion/MotionPlanner.cpp.obj
   FLAGS = -g
   LINK_LIBRARIES = -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\3D-Printer-Firmware.dir

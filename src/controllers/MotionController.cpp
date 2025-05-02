@@ -23,6 +23,8 @@ namespace {
     A4988Stepper stepperX(PIN_X_STEP, PIN_X_DIR);
     A4988Stepper stepperY(PIN_Y_STEP, PIN_Y_DIR);
     A4988Stepper stepperZ(PIN_Z_STEP, PIN_Z_DIR);
+
+    position::Position currentPosition = position::Position();
 }
 
 namespace MotionController {
@@ -55,18 +57,21 @@ namespace MotionController {
                 if (EndstopController::isTriggeredX()) break;
                 stepperX.step();
                 delayMicroseconds(plan.delayMicrosX);
+                currentPosition.x += (plan.dirX ? 1 : -1);
             }
             /* ---- asse Y ---- */
             if (i < plan.stepsY) {
                 if (EndstopController::isTriggeredY()) break;
                 stepperY.step();
                 delayMicroseconds(plan.delayMicrosY);
+                currentPosition.y += (plan.dirY ? 1 : -1);
             }
             /* ---- asse Z ---- */
             if (i < plan.stepsZ) {
                 if (EndstopController::isTriggeredZ()) break;
                 stepperZ.step();
                 delayMicroseconds(plan.delayMicrosZ);
+                currentPosition.z += (plan.dirZ ? 1 : -1);
             }
 
             /* ---- Refresh wathdog & machine state ---- */
@@ -77,10 +82,33 @@ namespace MotionController {
         }
     }
 
+    void goTo(int32_t targetX, int32_t targetY, int32_t targetZ, float feedrate) {
+        position::Position current = getPosition();
+
+        int32_t dx = targetX - current.x;
+        int32_t dy = targetY - current.y;
+        int32_t dz = targetZ - current.z;
+
+        moveTo(dx, dy, dz, feedrate);
+    }
+
+
     void emergencyStop() {
         stepperX.enable(false);
         stepperY.enable(false);
         Serial.println(F("EMERGENCY STOP triggered"));
+    }
+
+    position::Position getPosition() {
+        return currentPosition;
+    }
+
+    void setPosition(const position::Position &newPosition) {
+        currentPosition = newPosition;
+    }
+
+    void zeroPosition() {
+        currentPosition = position::Position();
     }
 
     void handle(int code, const char *params) {
@@ -97,6 +125,35 @@ namespace MotionController {
                 if (pz) z = atof(pz + 1);
                 if (pf) f = atof(pf + 1);
                 moveTo(x, y, z, f);
+                break;
+            }
+            case 11: { // Movimento assoluto: M11 X... Y... Z... F...
+                REQUIRE_STATE(MachineState::Printing);
+                float x = 0.0f, y = 0.0f, z = 0.0f, f = 1000.0f;
+                const char *px = strchr(params, 'X');
+                const char *py = strchr(params, 'Y');
+                const char *pz = strchr(params, 'Z');
+                const char *pf = strchr(params, 'F');
+                if (px) x = atof(px + 1);
+                if (py) y = atof(py + 1);
+                if (pz) z = atof(pz + 1);
+                if (pf) f = atof(pf + 1);
+                goTo(static_cast<int32_t>(x), static_cast<int32_t>(y), static_cast<int32_t>(z), f);
+                break;
+            }
+            case 12: { // Imposta posizione: M12 X... Y... Z...
+                position::Position pos = getPosition();
+                const char *px = strchr(params, 'X');
+                const char *py = strchr(params, 'Y');
+                const char *pz = strchr(params, 'Z');
+                if (px) pos.x = static_cast<int32_t>(atof(px + 1));
+                if (py) pos.y = static_cast<int32_t>(atof(py + 1));
+                if (pz) pos.z = static_cast<int32_t>(atof(pz + 1));
+                setPosition(pos);
+                break;
+            }
+            case 13: { // Azzera posizione: M13
+                zeroPosition();
                 break;
             }
             case 99: {
@@ -136,6 +193,16 @@ namespace MotionController {
 
                 break;
             }
+            case 114: { // M114: stampa posizione corrente
+                position::Position pos = getPosition();
+                Serial.print(F("Position: X="));
+                Serial.print(pos.x);
+                Serial.print(F(" Y="));
+                Serial.print(pos.y);
+                Serial.print(F(" Z="));
+                Serial.println(pos.z);
+                break;
+            }
             case 0:
                 emergencyStop();
                 break;
@@ -147,7 +214,7 @@ namespace MotionController {
     }
 
     void homeAxis(A4988Stepper &stepper, bool (*isTriggered)(), float speedPerMm, float feedrate, float minRate,
-                  float maxRate) {
+                  float maxRate, int32_t *positionTarget) {
         if (isTriggered()) {
             Serial.println(F("ENDSTOP ALREADY TRIGGERED"));
             return;
@@ -158,6 +225,7 @@ namespace MotionController {
         int steps = 0;
 
         while (!isTriggered()) {
+            (*positionTarget)--;
             BusyHandler::update();
             if ((steps & (CHUNK_SIZE - 1)) == 0) {
                 wdt_reset();
@@ -175,6 +243,7 @@ namespace MotionController {
         steps = 0;
         stepper.setDirection(true);
         while (steps < bouceSteps) {
+            (*positionTarget)--;
             BusyHandler::update();
             if ((steps & (CHUNK_SIZE - 1)) == 0) {
                 wdt_reset();
@@ -200,17 +269,17 @@ namespace MotionController {
         Serial.println(F("HOMING X..."));
         homeAxis(stepperX, EndstopController::isTriggeredX, MotionConfig::STEPS_PER_MM_X,
                  HomingConfig::HOMING_X_FEEDRATE,
-                 MotionConfig::MIN_FEEDRATE_X, MotionConfig::MAX_FEEDRATE_X);
+                 MotionConfig::MIN_FEEDRATE_X, MotionConfig::MAX_FEEDRATE_X, &currentPosition.x);
 
         Serial.println(F("HOMING Y..."));
         homeAxis(stepperY, EndstopController::isTriggeredY, MotionConfig::STEPS_PER_MM_Y,
                  HomingConfig::HOMING_Y_FEEDRATE,
-                 MotionConfig::MIN_FEEDRATE_Y, MotionConfig::MAX_FEEDRATE_Y);
+                 MotionConfig::MIN_FEEDRATE_Y, MotionConfig::MAX_FEEDRATE_Y, &currentPosition.y);
 
         Serial.println(F("HOMING Z..."));
         homeAxis(stepperZ, EndstopController::isTriggeredZ, MotionConfig::STEPS_PER_MM_Z,
                  HomingConfig::HOMING_Z_FEEDRATE,
-                 MotionConfig::MIN_FEEDRATE_Z, MotionConfig::MAX_FEEDRATE_Z);
+                 MotionConfig::MIN_FEEDRATE_Z, MotionConfig::MAX_FEEDRATE_Z, &currentPosition.z);
 
         Serial.println(F("HOMING COMPLETE"));
     }
@@ -265,4 +334,5 @@ namespace MotionController {
 
         Serial.println(F("Diagnosis complete"));
     }
+
 }

@@ -15,6 +15,7 @@ endif()
 file(GLOB_RECURSE NEW_GLOB LIST_DIRECTORIES false "D:/Progetti/Arduino/3D-Printer-Firmware/src/*.cpp")
 set(OLD_GLOB
   "D:/Progetti/Arduino/3D-Printer-Firmware/src/Application.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/BusyHandler.cpp"
   "D:/Progetti/Arduino/3D-Printer-Firmware/src/CommandDispatcher.cpp"
   "D:/Progetti/Arduino/3D-Printer-Firmware/src/CommandHistory.cpp"
   "D:/Progetti/Arduino/3D-Printer-Firmware/src/SafetyManager.cpp"
@@ -22,6 +23,7 @@ set(OLD_GLOB
   "D:/Progetti/Arduino/3D-Printer-Firmware/src/StateMachine.cpp"
   "D:/Progetti/Arduino/3D-Printer-Firmware/src/WatchdogHandler.cpp"
   "D:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/EndstopController.cpp"
+  "D:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/ExtruderController.cpp"
   "D:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/FanController.cpp"
   "D:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/HistoryController.cpp"
   "D:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/MotionController.cpp"
