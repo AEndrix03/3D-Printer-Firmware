@@ -82,12 +82,12 @@ namespace MotionController {
         }
     }
 
-    void goTo(int32_t targetX, int32_t targetY, int32_t targetZ, float feedrate) {
+    void goTo(float targetX, float targetY, float targetZ, float feedrate) {
         position::Position current = getPosition();
 
-        int32_t dx = targetX - current.x;
-        int32_t dy = targetY - current.y;
-        int32_t dz = targetZ - current.z;
+        float dx = ((targetX * MotionConfig::STEPS_PER_MM_X) - ((float) current.x)) / MotionConfig::STEPS_PER_MM_X;
+        float dy = ((targetY * MotionConfig::STEPS_PER_MM_Y) - ((float) current.y)) / MotionConfig::STEPS_PER_MM_Y;
+        float dz = ((targetZ * MotionConfig::STEPS_PER_MM_Z) - ((float) current.z)) / MotionConfig::STEPS_PER_MM_Z;
 
         moveTo(dx, dy, dz, feedrate);
     }
@@ -101,14 +101,6 @@ namespace MotionController {
 
     position::Position getPosition() {
         return currentPosition;
-    }
-
-    void setPosition(const position::Position &newPosition) {
-        currentPosition = newPosition;
-    }
-
-    void zeroPosition() {
-        currentPosition = position::Position();
     }
 
     void handle(int code, const char *params) {
@@ -138,22 +130,7 @@ namespace MotionController {
                 if (py) y = atof(py + 1);
                 if (pz) z = atof(pz + 1);
                 if (pf) f = atof(pf + 1);
-                goTo(static_cast<int32_t>(x), static_cast<int32_t>(y), static_cast<int32_t>(z), f);
-                break;
-            }
-            case 12: { // Imposta posizione: M12 X... Y... Z...
-                position::Position pos = getPosition();
-                const char *px = strchr(params, 'X');
-                const char *py = strchr(params, 'Y');
-                const char *pz = strchr(params, 'Z');
-                if (px) pos.x = static_cast<int32_t>(atof(px + 1));
-                if (py) pos.y = static_cast<int32_t>(atof(py + 1));
-                if (pz) pos.z = static_cast<int32_t>(atof(pz + 1));
-                setPosition(pos);
-                break;
-            }
-            case 13: { // Azzera posizione: M13
-                zeroPosition();
+                goTo(x, y, z, f);
                 break;
             }
             case 99: {
@@ -196,11 +173,11 @@ namespace MotionController {
             case 114: { // M114: stampa posizione corrente
                 position::Position pos = getPosition();
                 Serial.print(F("Position: X="));
-                Serial.print(pos.x);
+                Serial.print((pos.x / MotionConfig::STEPS_PER_MM_X));
                 Serial.print(F(" Y="));
-                Serial.print(pos.y);
+                Serial.print((pos.y / MotionConfig::STEPS_PER_MM_Y));
                 Serial.print(F(" Z="));
-                Serial.println(pos.z);
+                Serial.println((pos.z / MotionConfig::STEPS_PER_MM_Z));
                 break;
             }
             case 0:
@@ -214,7 +191,7 @@ namespace MotionController {
     }
 
     void homeAxis(A4988Stepper &stepper, bool (*isTriggered)(), float speedPerMm, float feedrate, float minRate,
-                  float maxRate, int32_t *positionTarget) {
+                  float maxRate, int *stepsPositionTarget) {
         if (isTriggered()) {
             Serial.println(F("ENDSTOP ALREADY TRIGGERED"));
             return;
@@ -225,7 +202,7 @@ namespace MotionController {
         int steps = 0;
 
         while (!isTriggered()) {
-            (*positionTarget)--;
+            (*stepsPositionTarget)--;
             BusyHandler::update();
             if ((steps & (CHUNK_SIZE - 1)) == 0) {
                 wdt_reset();
@@ -243,7 +220,7 @@ namespace MotionController {
         steps = 0;
         stepper.setDirection(true);
         while (steps < bouceSteps) {
-            (*positionTarget)--;
+            (*stepsPositionTarget)--;
             BusyHandler::update();
             if ((steps & (CHUNK_SIZE - 1)) == 0) {
                 wdt_reset();

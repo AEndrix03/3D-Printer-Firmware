@@ -28,7 +28,7 @@ namespace MotionController {
      */
     void moveTo(float x, float y, float z, float f);
 
-    void goTo(int32_t targetX, int32_t targetY, int32_t targetZ, float feedrate);
+    void goTo(float targetX, float targetY, float targetZ, float feedrate);
 
     /**
      * @brief Arresta immediatamente tutti i movimenti.
@@ -45,7 +45,7 @@ namespace MotionController {
      * @param maxRate Massima velocità di movimento (mm/min)
      */
     void homeAxis(A4988Stepper &stepper, bool (*isTriggered)(), float stepsPerMm, float feedrate, float minRate,
-                  float maxRate, int32_t *positionTarget);
+                  float maxRate, int32_t *stepsPositionTarget);
 
     /**
      * @brief Sposta i cursori fuori dall'area degli endstop.
@@ -71,8 +71,4 @@ namespace MotionController {
                       float maxRate);
 
     position::Position getPosition();
-
-    void setPosition(const position::Position &newPosition);
-
-    void zeroPosition();
 }
