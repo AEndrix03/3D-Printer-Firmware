@@ -21,6 +21,12 @@
 
 #include "./include/BusyHandler.hpp"
 
+namespace {
+    bool systemReady = false;
+    unsigned long lastReadyMessage = 0;
+    const unsigned long READY_MESSAGE_INTERVAL = 5000; // 5 secondi
+}
+
 void Application::init() {
     Serial.begin(115200);
     while (!Serial); // attende la seriale solo su USB native
@@ -45,11 +51,23 @@ void Application::init() {
     wdt_disable();
 
     Serial.println(F("Sistema pronto."));
+    lastReadyMessage = millis();
 }
 
 void Application::loop() {
     WatchdogHandler::reset(); // evita reset da watchdog
+
+    // Se il sistema non ha ancora ricevuto comandi, continua a inviare "Sistema pronto."
+    if (!systemReady && (millis() - lastReadyMessage >= READY_MESSAGE_INTERVAL)) {
+        Serial.println(F("Sistema pronto."));
+        lastReadyMessage = millis();
+    }
+
     SerialCommandReceiver::update(); // leggi comandi seriali
     SafetyManager::update(); // controlla timeout e sicurezza
     BusyHandler::update(); // Aggiorna lo stato BUSY, se necessario
+}
+
+void Application::notifyCommandReceived() {
+    systemReady = true;
 }

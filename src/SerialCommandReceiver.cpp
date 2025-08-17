@@ -5,13 +5,14 @@
 #include "./include/CommandHistory.hpp"
 #include "./include/SafetyManager.hpp"
 #include "./include/BusyHandler.hpp"
+#include "./include/Application.hpp"
 
 uint16_t SerialCommandReceiver::lastCommandNumber = 0;
 
 namespace {
     char inputBuffer[64];
     uint8_t bufferIndex = 0;
-
+    bool firstCommandReceived = false;
 
     uint8_t computeChecksum(const char *str) {
         uint8_t cs = 0;
@@ -91,6 +92,12 @@ void SerialCommandReceiver::update() {
             cmd.valid = (cmd.checksum == extractProvidedChecksum(inputBuffer));
 
             if (cmd.valid) {
+                // Notifica il primo comando ricevuto per fermare i messaggi "Sistema pronto."
+                if (!firstCommandReceived) {
+                    firstCommandReceived = true;
+                    Application::notifyCommandReceived();
+                }
+
                 if (cmd.number == lastCommandNumber) {
                     Serial.print(F("DUPLICATE N"));
                     Serial.println(cmd.number);
