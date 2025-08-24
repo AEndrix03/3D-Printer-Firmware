@@ -103,7 +103,7 @@ namespace MotionController {
         return currentPosition;
     }
 
-    void handle(int code, const char *params) {
+    void handle(uint8_t code, const char *params) {
         switch (code) {
             case 10: {
                 REQUIRE_STATE(MachineState::Printing);
@@ -119,7 +119,8 @@ namespace MotionController {
                 moveTo(x, y, z, f);
                 break;
             }
-            case 11: { // Movimento assoluto: M11 X... Y... Z... F...
+            case 11: {
+                // Movimento assoluto: M11 X... Y... Z... F...
                 REQUIRE_STATE(MachineState::Printing);
                 float x = 0.0f, y = 0.0f, z = 0.0f, f = 1000.0f;
                 const char *px = strchr(params, 'X');
@@ -170,7 +171,8 @@ namespace MotionController {
 
                 break;
             }
-            case 114: { // M114: stampa posizione corrente
+            case 114: {
+                // M114: stampa posizione corrente
                 position::Position pos = getPosition();
                 Serial.print(F("Position: X="));
                 Serial.print((pos.x / MotionConfig::STEPS_PER_MM_X));
@@ -311,5 +313,4 @@ namespace MotionController {
 
         Serial.println(F("Diagnosis complete"));
     }
-
 }

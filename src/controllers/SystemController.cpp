@@ -5,8 +5,7 @@
 #include "../include/StateMachine.hpp"
 
 namespace SystemController {
-
-    void handle(int code, const char *params) {
+    void handle(uint8_t code, const char *params) {
         switch (code) {
             case 0:
                 homing();
@@ -81,6 +80,4 @@ namespace SystemController {
             Serial.println(F("HOMING COMPLETE. STATE -> IDLE"));
         }
     }
-
-
 }

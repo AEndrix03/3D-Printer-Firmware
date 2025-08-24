@@ -17,7 +17,7 @@ namespace MotionController {
      * @param code Codice specifico del comando (es. 10 = MOVE, 0 = STOP)
      * @param params Parametri associati (es. "X10.0 Y20.0 Z30.0 F1500")
      */
-    void handle(int code, const char *params);
+    void handle(uint8_t code, const char *params);
 
     /**
      * @brief Muove la testina/asse alla posizione specificata.

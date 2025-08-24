@@ -4,7 +4,6 @@
  * @brief Gestisce la lettura e logica dei finecorsa sugli assi.
  */
 namespace EndstopController {
-
     /**
      * @brief Inizializza i pin dei finecorsa come input (pullup).
      */
@@ -15,7 +14,7 @@ namespace EndstopController {
      * @param code Codice (es. 10 = READ Z)
      * @param params Parametri (opzionali, es. "Z")
      */
-    void handle(int code, const char *params);
+    void handle(uint8_t code, const char *params);
 
     /**
      * @brief Verifica se il finecorsa X è attivo.

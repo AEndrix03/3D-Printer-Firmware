@@ -5,8 +5,7 @@
  * Esegue lettura carattere per carattere e costruisce ParsedCommand.
  */
 namespace SerialCommandReceiver {
-
-    extern uint16_t lastCommandNumber;
+    extern uint32_t lastCommandNumber;
 
     /**
      * @brief Deve essere chiamata regolarmente nel loop.

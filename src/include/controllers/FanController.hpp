@@ -6,7 +6,6 @@
  * @brief Controlla le ventole PWM collegate alla macchina.
  */
 namespace FanController {
-
     /**
      * @brief Inizializza i pin PWM e imposta lo stato iniziale.
      */
@@ -17,7 +16,7 @@ namespace FanController {
      * @param code Codice del comando (es. 10 = SET SPEED)
      * @param params Parametri (es. "S255")
      */
-    void handle(int code, const char *params);
+    void handle(uint8_t code, const char *params);
 
     /**
      * @brief Imposta la velocità della ventola.

@@ -83,7 +83,7 @@ namespace ExtruderController {
         Serial.println(stepsPerMm);
     }
 
-    void handle(int code, const char *params) {
+    void handle(uint8_t code, const char *params) {
         switch (code) {
             case 10: {
                 // A10 E10.0 F800

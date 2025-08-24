@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 namespace ExtruderController {
     void init();
 
@@ -16,7 +18,7 @@ namespace ExtruderController {
     void setStepsPerMM(float newSteps);
 
 
-    void handle(int code, const char *params);
+    void handle(uint8_t code, const char *params);
 
     void emergencyStop();
 }

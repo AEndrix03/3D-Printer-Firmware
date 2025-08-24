@@ -3,17 +3,17 @@
 #include "../include/Pins.hpp"
 
 namespace FanController {
-
     void init() {
         pinMode(PIN_FAN, OUTPUT);
         analogWrite(PIN_FAN, 0);
     }
 
-    void handle(int code, const char *params) {
+    void handle(uint8_t code, const char *params) {
+        // int -> uint8_t
         if (code == 10) {
             const char *p = strchr(params, 'S');
             if (p) {
-                uint8_t value = atoi(p + 1);
+                uint8_t value = (uint8_t) atoi(p + 1); // Cast esplicito
                 setSpeed(value);
             }
         }

@@ -9,5 +9,5 @@ namespace HistoryController {
      * @param code Codice del comando H (10, 20, 30, 40)
      * @param params Parametri (es. "N5" per H20)
      */
-    void handle(int code, const char *params);
+    void handle(uint8_t code, const char *params);
 }

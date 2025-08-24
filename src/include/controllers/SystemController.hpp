@@ -4,13 +4,12 @@
  * @brief Espone comandi di sistema generici (status, reset, info).
  */
 namespace SystemController {
-
     /**
      * @brief Gestisce un comando di sistema.
      * @param code Codice (es. 10 = STATUS, 0 = RESET)
      * @param params Parametri (eventualmente vuoti)
      */
-    void handle(int code, const char *params);
+    void handle(uint8_t code, const char *params);
 
     /**
      * @brief Stampa sul log seriale lo stato della macchina.

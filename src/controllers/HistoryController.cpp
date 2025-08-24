@@ -4,13 +4,14 @@
 #include "./../include/CommandHistory.hpp"
 
 namespace HistoryController {
-
-    void handle(int code, const char *params) {
+    void handle(uint8_t code, const char *params) {
+        // int -> uint8_t
         switch (code) {
-
             case 10:
                 Serial.println(F("=== HISTORY BUFFER ==="));
-                for (uint16_t i = 0; i < 256; ++i) {
+            // Ridotto loop - solo comandi validi recenti
+                for (uint8_t i = 0; i < 16; ++i) {
+                    // Ridotto da 256
                     const char *cmd = CommandHistory::get(i);
                     if (cmd) {
                         Serial.print(F("N"));
@@ -24,7 +25,7 @@ namespace HistoryController {
             case 20: {
                 const char *p = strchr(params, 'N');
                 if (p) {
-                    uint16_t n = atoi(p + 1);
+                    uint16_t n = (uint16_t) atoi(p + 1);
                     const char *cmd = CommandHistory::get(n);
                     if (cmd) {
                         Serial.print(F("RESEND N"));
@@ -52,5 +53,4 @@ namespace HistoryController {
                 Serial.println(F("Unknown history command"));
         }
     }
-
 }

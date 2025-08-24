@@ -7,36 +7,31 @@
 #include "./include/BusyHandler.hpp"
 #include "./include/Application.hpp"
 
-uint16_t SerialCommandReceiver::lastCommandNumber = 0;
+uint32_t SerialCommandReceiver::lastCommandNumber = 0;
 
 namespace {
-    char inputBuffer[64];
+    char inputBuffer[32];
     uint8_t bufferIndex = 0;
     bool firstCommandReceived = false;
 
     uint8_t computeChecksum(const char *str) {
         uint8_t cs = 0;
-
-        // Trova posizione dell'asterisco
         const char *p = strchr(str, '*');
         size_t len = p ? (size_t) (p - str) : strlen(str);
 
-        // Rimuovi eventuali spazi prima del *
         while (len > 0 && str[len - 1] == ' ') {
             --len;
         }
 
-        // Calcola XOR
         for (size_t i = 0; i < len; ++i) {
             cs ^= (uint8_t) str[i];
         }
-
         return cs;
     }
 
-    uint16_t extractNumber(const char *line) {
+    uint32_t extractNumber(const char *line) {
         if (line[0] != 'N') return 0;
-        return (uint16_t) atoi(line + 1);
+        return (uint32_t) atol(line + 1); // atoi -> atol per uint32_t
     }
 
     char extractCategory(const char *line) {
@@ -61,7 +56,7 @@ namespace {
         return p ? (uint8_t) atoi(p + 1) : 0;
     }
 
-    void resend(uint16_t number) {
+    void resend(uint32_t number) {
         const char *cmd = CommandHistory::get(number);
         if (cmd) {
             Serial.print(F("RESEND N"));
@@ -71,6 +66,15 @@ namespace {
             Serial.print(F("RESEND FAILED N"));
             Serial.println(number);
         }
+    }
+
+    // Gestione semplificata - no overflow per 4+ miliardi comandi
+    bool isNextExpected(uint32_t received, uint32_t last) {
+        return received == (last + 1);
+    }
+
+    bool isDuplicate(uint32_t received, uint32_t last) {
+        return received == last;
     }
 }
 
@@ -92,17 +96,17 @@ void SerialCommandReceiver::update() {
             cmd.valid = (cmd.checksum == extractProvidedChecksum(inputBuffer));
 
             if (cmd.valid) {
-                // Notifica il primo comando ricevuto per fermare i messaggi "Sistema pronto."
                 if (!firstCommandReceived) {
                     firstCommandReceived = true;
                     Application::notifyCommandReceived();
                 }
 
-                if (cmd.number == lastCommandNumber) {
+                if (isDuplicate(cmd.number, lastCommandNumber)) {
                     Serial.print(F("DUPLICATE N"));
                     Serial.println(cmd.number);
-                } else if (cmd.number != lastCommandNumber + 1) {
-                    resend(lastCommandNumber + 1);
+                } else if (!isNextExpected(cmd.number, lastCommandNumber)) {
+                    uint32_t expected = lastCommandNumber + 1;
+                    resend(expected);
                 } else {
                     lastCommandNumber = cmd.number;
                     SafetyManager::notifyCommandReceived();

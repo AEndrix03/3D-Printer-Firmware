@@ -4,7 +4,6 @@
 #include "../include/Config.hpp"
 
 namespace TempController {
-
     bool monitoringEnabled = true;
     float targetTemp = 0;
 
@@ -13,9 +12,10 @@ namespace TempController {
         digitalWrite(PIN_HEATER, LOW);
     }
 
-    void handle(int code, const char *params) {
+    void handle(uint8_t code, const char *params) {
         switch (code) {
-            case 10: { // SET
+            case 10: {
+                // SET
                 const char *p = strchr(params, 'T');
                 if (p) {
                     float t = atof(p + 1);
@@ -54,5 +54,4 @@ namespace TempController {
     void enableMonitoring(bool enabled) {
         monitoringEnabled = enabled;
     }
-
 }

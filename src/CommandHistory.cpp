@@ -2,34 +2,35 @@
 #include <string.h>
 
 namespace {
-
     struct CommandSlot {
-        uint16_t number;
-        char text[64];
+        uint32_t number; // Era uint16_t
+        char text[32];
     };
 
     CommandSlot buffer[CommandHistory::BUFFER_SIZE];
     uint8_t head = 0;
-
 }
 
 namespace CommandHistory {
-
     void init() {
         for (uint8_t i = 0; i < BUFFER_SIZE; ++i) {
-            buffer[i].number = 0xFFFF;
+            buffer[i].number = 0xFFFFFFFF; // Era 0xFFFF
             buffer[i].text[0] = '\0';
         }
     }
 
-    void store(uint16_t number, const char *text) {
+    void store(uint32_t number, const char *text) {
+        // Era uint16_t
         buffer[head].number = number;
+
         strncpy(buffer[head].text, text, sizeof(buffer[head].text) - 1);
         buffer[head].text[sizeof(buffer[head].text) - 1] = '\0';
+
         head = (head + 1) % BUFFER_SIZE;
     }
 
-    const char *get(uint16_t number) {
+    const char *get(uint32_t number) {
+        // Era uint16_t
         for (uint8_t i = 0; i < BUFFER_SIZE; ++i) {
             if (buffer[i].number == number) {
                 return buffer[i].text;
@@ -40,9 +41,9 @@ namespace CommandHistory {
 
     void clear() {
         for (uint8_t i = 0; i < BUFFER_SIZE; ++i) {
-            buffer[i].number = 0xFFFF;
+            buffer[i].number = 0xFFFFFFFF; // Era 0xFFFF
             buffer[i].text[0] = '\0';
         }
+        head = 0;
     }
-
 }

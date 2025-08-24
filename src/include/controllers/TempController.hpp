@@ -4,7 +4,6 @@
  * @brief Gestisce la lettura della temperatura e il controllo termico (es. PID).
  */
 namespace TempController {
-
     /**
      * @brief Inizializza pin, ADC e strutture termiche.
      */
@@ -15,7 +14,7 @@ namespace TempController {
      * @param code Codice del comando (es. 10 = SET, 20 = READ)
      * @param params Parametri del comando (es. "T200")
      */
-    void handle(int code, const char *params);
+    void handle(uint8_t code, const char *params);
 
     /**
      * @brief Restituisce la temperatura attuale (°C).
@@ -38,5 +37,4 @@ namespace TempController {
      * @brief Abilita o disabilita il controllo della temperatura
      */
     void enableMonitoring(bool enabled);
-
 }

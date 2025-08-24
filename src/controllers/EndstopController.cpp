@@ -10,7 +10,7 @@ namespace EndstopController {
         pinMode(PIN_ENDSTOP_Z, INPUT_PULLUP);
     }
 
-    void handle(int code, const char *params) {
+    void handle(uint8_t code, const char *params) {
         if (code == 10) {
             Serial.print(F("ENDSTOPS: X="));
             Serial.print(isTriggeredX());
