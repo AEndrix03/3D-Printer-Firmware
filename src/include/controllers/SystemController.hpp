@@ -45,4 +45,8 @@ namespace SystemController {
      * @brief Avvia il processo di Homing della macchina, solo se in Idle
      */
     void homing();
+
+    void clearError();
+
+    void printErrorStatus();
 }

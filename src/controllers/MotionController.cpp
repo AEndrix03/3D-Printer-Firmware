@@ -94,9 +94,12 @@ namespace MotionController {
 
 
     void emergencyStop() {
+        // Disabilita tutti i motori immediatamente
         stepperX.enable(false);
         stepperY.enable(false);
-        Serial.println(F("EMERGENCY STOP triggered"));
+        stepperZ.enable(false);
+
+        Serial.println(F("MOTION EMERGENCY STOP"));
     }
 
     position::Position getPosition() {
@@ -104,6 +107,13 @@ namespace MotionController {
     }
 
     void handle(uint8_t code, const char *params) {
+        if (StateMachine::getState() == MachineState::Error && code != 0) {
+            Serial.println(F("ERR MOTION_BLOCKED_ERROR_STATE"));
+            Serial.print(F("Use S6 to clear error. Reason: "));
+            Serial.println(SafetyManager::getErrorReason());
+            return;
+        }
+
         switch (code) {
             case 10: {
                 REQUIRE_STATE(MachineState::Printing);

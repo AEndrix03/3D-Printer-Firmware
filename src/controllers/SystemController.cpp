@@ -3,6 +3,7 @@
 #include "../include/controllers/SystemController.hpp"
 #include "../include/controllers/MotionController.hpp"
 #include "../include/StateMachine.hpp"
+#include "../include/SafetyManager.hpp"
 
 namespace SystemController {
     void handle(uint8_t code, const char *params) {
@@ -25,6 +26,11 @@ namespace SystemController {
             case 5:
                 reset();
                 break;
+            case 6:
+                clearError();
+                break;
+            case 7:
+                printErrorStatus();
             case 10:
                 printStatus();
                 break;
@@ -67,6 +73,26 @@ namespace SystemController {
 
         wdt_enable(WDTO_15MS);
         while (1);
+    }
+
+    void clearError() {
+        if (SafetyManager::clearError()) {
+            Serial.println(F("Error cleared successfully"));
+        } else {
+            Serial.println(F("No active error to clear"));
+        }
+    }
+
+    void printErrorStatus() {
+        if (SafetyManager::isInErrorState()) {
+            Serial.print(F("ERROR ACTIVE: "));
+            Serial.print(SafetyManager::getErrorReason());
+            Serial.print(F(" (since: "));
+            Serial.print(SafetyManager::getErrorTimestamp());
+            Serial.println(F("ms)"));
+        } else {
+            Serial.println(F("NO ERROR"));
+        }
     }
 
     void homing() {

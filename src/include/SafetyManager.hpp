@@ -6,7 +6,6 @@
  * @brief Gestisce condizioni di sicurezza a runtime: temperatura, timeout, comandi critici.
  */
 namespace SafetyManager {
-
     /**
      * @brief Inizializza il modulo di sicurezza.
      */
@@ -44,4 +43,12 @@ namespace SafetyManager {
      * @brief Applica logica di emergenza in caso di problemi.
      */
     void emergencyStop(const char *reason);
+
+    bool clearError();
+
+    const char *getErrorReason();
+
+    unsigned long getErrorTimestamp();
+
+    bool isInErrorState();
 }

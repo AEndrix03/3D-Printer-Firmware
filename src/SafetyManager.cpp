@@ -5,16 +5,18 @@
 #include "./include/controllers/EndstopController.hpp"
 #include "./include/StateMachine.hpp"
 #include "./include/Pins.hpp"
+#include "include/controllers/FanController.hpp"
 
 namespace {
     unsigned long lastCommandTime = 0;
-    // Rimosso TIMEOUT_MS - no più timeout rigido
 
-    // Power management states (commenti per implementazione futura)
-    // enum PowerState { ACTIVE, IDLE, SLEEP };
-    // PowerState currentPowerState = ACTIVE;
-    // constexpr unsigned long IDLE_THRESHOLD = 300000; // 5 min per entrare in idle
-    // constexpr unsigned long SLEEP_THRESHOLD = 1800000; // 30 min per sleep
+    struct ErrorState {
+        bool active = false;
+        unsigned long timestamp = 0;
+        char reason[32] = {0};
+    };
+
+    ErrorState currentError;
 }
 
 namespace SafetyManager {
@@ -63,34 +65,46 @@ namespace SafetyManager {
     }
 
     void emergencyStop(const char *reason) {
+        // Salva dettagli errore
+        currentError.active = true;
+        currentError.timestamp = millis();
+        strncpy(currentError.reason, reason, sizeof(currentError.reason) - 1);
         Serial.print(F("!!! EMERGENCY: "));
         Serial.println(reason);
-        MotionController::emergencyStop();
+        // Spegni tutto in sicurezza
         digitalWrite(PIN_HEATER, LOW);
+        MotionController::emergencyStop();
+        FanController::setSpeed(0);
+        // Vai in error state
         StateMachine::setState(MachineState::Error);
     }
 
-    // TODO: Implementare funzioni power management
-    /*
-    void enterIdleMode() {
-        // Riduce frequenza PWM ventole
-        // Riduce luminosità LED se presenti
-        // Rallenta polling sensori non critici
-        currentPowerState = IDLE;
+    bool isInErrorState() {
+        return currentError.active && StateMachine::getState() == MachineState::Error;
     }
 
-    void enterSleepMode() {
-        // Disabilita stepper (se safe)
-        // Mette ADC in power-down tra letture
-        // Riduce frequenza CPU se possibile
-        // Mantiene solo serial e safety attivi
-        currentPowerState = SLEEP;
+    const char *getErrorReason() {
+        return currentError.active ? currentError.reason : "No Error";
     }
 
-    void wakeUp() {
-        // Riattiva tutti i sistemi
-        // Ripristina frequenza normale
-        currentPowerState = ACTIVE;
+    unsigned long getErrorTimestamp() {
+        return currentError.timestamp;
     }
-    */
+
+    bool clearError() {
+        if (!currentError.active) return false;
+        // Reset stato errore
+        currentError.active = false;
+        currentError.timestamp = 0;
+        memset(currentError.reason, 0, sizeof(currentError.reason));
+
+        // Torna in Idle solo se attualmente in Error
+        if (StateMachine::getState() == MachineState::Error) {
+            StateMachine::setState(MachineState::Idle);
+            Serial.println(F("ERROR CLEARED - STATE -> IDLE"));
+            return true;
+        }
+
+        return false;
+    }
 }

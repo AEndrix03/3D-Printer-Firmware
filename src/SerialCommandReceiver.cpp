@@ -10,7 +10,7 @@
 uint32_t SerialCommandReceiver::lastCommandNumber = 0;
 
 namespace {
-    char inputBuffer[32];
+    char inputBuffer[64];
     uint8_t bufferIndex = 0;
     bool firstCommandReceived = false;
 
@@ -68,13 +68,27 @@ namespace {
         }
     }
 
-    // Gestione semplificata - no overflow per 4+ miliardi comandi
     bool isNextExpected(uint32_t received, uint32_t last) {
         return received == (last + 1);
     }
 
     bool isDuplicate(uint32_t received, uint32_t last) {
         return received == last;
+    }
+
+    void resetBuffer() {
+        bufferIndex = 0;
+        memset(inputBuffer, 0, sizeof(inputBuffer));
+    }
+
+    bool addCharToBuffer(char c) {
+        if (bufferIndex >= sizeof(inputBuffer) - 1) {
+            Serial.println(F("ERR BUFFER_OVERFLOW"));
+            resetBuffer();
+            return false;
+        }
+        inputBuffer[bufferIndex++] = c;
+        return true;
     }
 }
 
@@ -126,11 +140,9 @@ void SerialCommandReceiver::update() {
                 Serial.println(extractProvidedChecksum(inputBuffer));
             }
 
-            bufferIndex = 0;
-        } else if (bufferIndex < sizeof(inputBuffer) - 1) {
-            inputBuffer[bufferIndex++] = c;
-        } else {
-            bufferIndex = 0;
+            resetBuffer(); // Usa la nuova funzione
+        } else if (!addCharToBuffer(c)) {
+            // Buffer overflow gestito in addCharToBuffer()
         }
     }
 }

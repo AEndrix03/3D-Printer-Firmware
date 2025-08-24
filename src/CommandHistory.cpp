@@ -4,7 +4,7 @@
 namespace {
     struct CommandSlot {
         uint32_t number; // Era uint16_t
-        char text[32];
+        char text[64];
     };
 
     CommandSlot buffer[CommandHistory::BUFFER_SIZE];

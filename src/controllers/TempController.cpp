@@ -2,6 +2,7 @@
 #include "../include/controllers/TempController.hpp"
 #include "../include/Pins.hpp"
 #include "../include/Config.hpp"
+#include "../include/StateMachine.hpp"
 
 namespace TempController {
     bool monitoringEnabled = true;
@@ -13,6 +14,11 @@ namespace TempController {
     }
 
     void handle(uint8_t code, const char *params) {
+        if (StateMachine::getState() == MachineState::Error && code != 0) {
+            Serial.println(F("ERR TEMP_BLOCKED_ERROR_STATE"));
+            return;
+        }
+
         switch (code) {
             case 10: {
                 // SET
@@ -26,6 +32,15 @@ namespace TempController {
             case 20: // GET
                 Serial.print(F("TEMP="));
                 Serial.println(getTemperature());
+                break;
+            case 0:
+                setTargetTemperature(0);
+                digitalWrite(PIN_HEATER, LOW);
+                Serial.println(F("TEMP EMERGENCY STOP"));
+                break;
+            default:
+                Serial.print(F("Unknown T-code: T"));
+                Serial.println(code);
                 break;
         }
     }
