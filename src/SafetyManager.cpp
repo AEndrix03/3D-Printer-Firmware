@@ -25,11 +25,8 @@ namespace SafetyManager {
     }
 
     void update() {
-        // Rimosse verifiche timeout - no più emergency stop per inattività
-
-        if (hasCriticalCondition()) {
-            emergencyStop("TEMP OVERLIMIT");
-        }
+        /// Controllo thermal protection
+        TempController::updateThermalProtection();
 
         if (isAnyEndstopTriggered()) {
             emergencyStop("ENDSTOP TRIGGERED DURING PRINTING PHASE");
