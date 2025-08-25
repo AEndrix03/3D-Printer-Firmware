@@ -6,7 +6,7 @@
  * @brief Memorizza i comandi recenti per supporto a RESEND.
  */
 namespace CommandHistory {
-    constexpr uint8_t BUFFER_SIZE = 4;
+    constexpr uint8_t BUFFER_SIZE = 3;
 
     /**
      * @brief Inizializza il buffer circolare.

@@ -10,7 +10,7 @@
 uint32_t SerialCommandReceiver::lastCommandNumber = 0;
 
 namespace {
-    char inputBuffer[64];
+    char inputBuffer[48];
     uint8_t bufferIndex = 0;
     bool firstCommandReceived = false;
 

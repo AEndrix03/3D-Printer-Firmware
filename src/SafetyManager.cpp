@@ -15,7 +15,7 @@ namespace {
     struct ErrorState {
         bool active = false;
         uint32_t timestamp = 0;
-        char reason[24] = {0}; // Ridotto da 32
+        char reason[12] = {0};
     };
 
     ErrorState currentError;
