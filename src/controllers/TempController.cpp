@@ -6,6 +6,7 @@
 #include "../include/Config.hpp"
 #include "../include/SafetyManager.hpp"
 #include "../include/StateMachine.hpp"
+#include "../include/TimeUtils.hpp"
 
 // Constanti in PROGMEM per risparmiare RAM
 #define MAX_TEMP_C 280
@@ -47,31 +48,27 @@ namespace TempController {
 
     bool checkThermalRunaway() {
         if (!(tp.flags & 0x02) || !monitoringEnabled) return false;
-
         float temp = getTemperature();
         bool heaterOn = (digitalRead(PIN_HEATER) == HIGH);
         uint32_t now = millis();
-
         // Max temp check
         if (temp > MAX_TEMP_C) {
             Serial.println(F("!!! MAX_TEMP"));
             return true;
         }
-
-        // Runaway check  
+        // Runaway check
         if (targetTemp > 0 && temp > (targetTemp + RUNAWAY_DELTA_C)) {
             Serial.println(F("!!! RUNAWAY"));
             return true;
         }
 
-        // Heating timeout check
+        // Heating timeout check - OVERFLOW SAFE
         if (heaterOn) {
             if (!(tp.flags & 0x01)) {
-                // heaterWasOn == false
                 tp.heaterStartTime = now;
                 tp.tempAtStart_x10 = (int16_t) (temp * 10);
-                tp.flags |= 0x01; // Set heaterWasOn
-            } else if ((now - tp.heaterStartTime) >= (tp.timeoutSeconds * 1000UL)) {
+                tp.flags |= 0x01;
+            } else if (TimeUtils::hasElapsed(tp.heaterStartTime, tp.timeoutSeconds * 1000UL)) {
                 float rise = temp - (tp.tempAtStart_x10 / 10.0f);
                 if (rise < MIN_TEMP_RISE_C) {
                     Serial.println(F("!!! HEAT_TIMEOUT"));
@@ -81,7 +78,7 @@ namespace TempController {
                 tp.tempAtStart_x10 = (int16_t) (temp * 10);
             }
         } else {
-            tp.flags &= ~0x01; // Clear heaterWasOn
+            tp.flags &= ~0x01;
         }
 
         return false;
@@ -143,14 +140,13 @@ namespace TempController {
     }
 
     void updateThermalProtection() {
-        static uint16_t lastCheck = 0;
-        uint16_t now = millis() & 0xFFFF;
+        static uint32_t lastCheck = 0;
 
-        if ((uint16_t) (now - lastCheck) >= 500) {
+        if (TimeUtils::hasElapsed(lastCheck, 500)) {
             if (checkThermalRunaway()) {
                 SafetyManager::emergencyStop("THERMAL_RUNAWAY");
             }
-            lastCheck = now;
+            lastCheck = millis();
         }
     }
 }

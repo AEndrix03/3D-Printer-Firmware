@@ -4,13 +4,15 @@
 
 #include "include/BusyHandler.hpp"
 
+#include "./include/TimeUtils.hpp"
+
 namespace {
     bool active = false;
-    unsigned long lastBusyTime = 0;
+    uint32_t lastBusyTime = 0;
+    constexpr uint32_t BUSY_INTERVAL = 1000;
 }
 
 namespace BusyHandler {
-
     void start() {
         active = true;
         lastBusyTime = millis();
@@ -21,12 +23,9 @@ namespace BusyHandler {
     }
 
     void update() {
-        if (!active) return;
-
-        if (millis() - lastBusyTime >= 1000) {
+        if (active && TimeUtils::hasElapsed(lastBusyTime, BUSY_INTERVAL)) {
             Serial.println(F("BUSY"));
             lastBusyTime = millis();
         }
     }
-
 }

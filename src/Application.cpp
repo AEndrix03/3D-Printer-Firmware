@@ -20,6 +20,7 @@
 #include "./include/Config.hpp"
 
 #include "./include/BusyHandler.hpp"
+#include "include/TimeUtils.hpp"
 
 namespace {
     bool systemReady = false;
@@ -55,17 +56,16 @@ void Application::init() {
 }
 
 void Application::loop() {
-    WatchdogHandler::reset(); // evita reset da watchdog
+    WatchdogHandler::reset();
 
-    // Se il sistema non ha ancora ricevuto comandi, continua a inviare "Sistema pronto."
-    if (!systemReady && (millis() - lastReadyMessage >= READY_MESSAGE_INTERVAL)) {
+    if (!systemReady && TimeUtils::hasElapsed(lastReadyMessage, READY_MESSAGE_INTERVAL)) {
         Serial.println(F("Sistema pronto."));
         lastReadyMessage = millis();
     }
 
-    SerialCommandReceiver::update(); // leggi comandi seriali
-    SafetyManager::update(); // controlla timeout e sicurezza
-    BusyHandler::update(); // Aggiorna lo stato BUSY, se necessario
+    SerialCommandReceiver::update();
+    SafetyManager::update();
+    BusyHandler::update();
 }
 
 void Application::notifyCommandReceived() {

@@ -7,13 +7,15 @@
 #include "./include/Pins.hpp"
 #include "include/controllers/FanController.hpp"
 
+#include "./include/TimeUtils.hpp"
+
 namespace {
-    unsigned long lastCommandTime = 0;
+    uint32_t lastCommandTime = 0;
 
     struct ErrorState {
         bool active = false;
-        unsigned long timestamp = 0;
-        char reason[32] = {0};
+        uint32_t timestamp = 0;
+        char reason[24] = {0}; // Ridotto da 32
     };
 
     ErrorState currentError;
@@ -25,83 +27,66 @@ namespace SafetyManager {
     }
 
     void update() {
-        /// Controllo thermal protection
         TempController::updateThermalProtection();
 
-        if (isAnyEndstopTriggered()) {
-            emergencyStop("ENDSTOP TRIGGERED DURING PRINTING PHASE");
-            EndstopController::handle(10, nullptr);
+        if (hasCriticalCondition()) {
+            emergencyStop("TEMP_OVERLIMIT");
         }
 
-        // TODO: Implementare power management
-        // unsigned long inactiveTime = millis() - lastCommandTime;
-        // if (inactiveTime > SLEEP_THRESHOLD) {
-        //     enterSleepMode();
-        // } else if (inactiveTime > IDLE_THRESHOLD) {
-        //     enterIdleMode();
-        // }
+        if (isAnyEndstopTriggered()) {
+            emergencyStop("ENDSTOP_HIT");
+            EndstopController::handle(10, nullptr);
+        }
     }
 
     void notifyCommandReceived() {
         lastCommandTime = millis();
-        // TODO: Wake up da sleep/idle mode se necessario
-        // if (currentPowerState != ACTIVE) {
-        //     wakeUp();
-        // }
-    }
-
-    // Rimossa hasTimedOut() - non più necessaria
-
-    bool hasCriticalCondition() {
-        float temp = TempController::getTemperature();
-        return temp > 250.0f;
-    }
-
-    bool isAnyEndstopTriggered() {
-        return StateMachine::getState() == MachineState::Printing && EndstopController::isAnyTriggered();
     }
 
     void emergencyStop(const char *reason) {
-        // Salva dettagli errore
         currentError.active = true;
         currentError.timestamp = millis();
         strncpy(currentError.reason, reason, sizeof(currentError.reason) - 1);
         Serial.print(F("!!! EMERGENCY: "));
         Serial.println(reason);
-        // Spegni tutto in sicurezza
         digitalWrite(PIN_HEATER, LOW);
         MotionController::emergencyStop();
         FanController::setSpeed(0);
-        // Vai in error state
         StateMachine::setState(MachineState::Error);
     }
 
     bool isInErrorState() {
-        return currentError.active && StateMachine::getState() == MachineState::Error;
+        return currentError.active;
     }
 
     const char *getErrorReason() {
         return currentError.active ? currentError.reason : "No Error";
     }
 
-    unsigned long getErrorTimestamp() {
-        return currentError.timestamp;
+    uint32_t getErrorTimestamp() {
+        return currentError.active ? TimeUtils::elapsed(currentError.timestamp) : 0;
     }
 
     bool clearError() {
         if (!currentError.active) return false;
-        // Reset stato errore
         currentError.active = false;
         currentError.timestamp = 0;
-        memset(currentError.reason, 0, sizeof(currentError.reason));
+        currentError.reason[0] = '\0';
 
-        // Torna in Idle solo se attualmente in Error
         if (StateMachine::getState() == MachineState::Error) {
             StateMachine::setState(MachineState::Idle);
-            Serial.println(F("ERROR CLEARED - STATE -> IDLE"));
+            Serial.println(F("ERROR CLEARED"));
             return true;
         }
-
         return false;
+    }
+
+    bool hasCriticalCondition() {
+        return TempController::getTemperature() > 250.0f;
+    }
+
+    bool isAnyEndstopTriggered() {
+        return StateMachine::getState() == MachineState::Printing &&
+               EndstopController::isAnyTriggered();
     }
 }

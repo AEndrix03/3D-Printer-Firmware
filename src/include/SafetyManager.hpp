@@ -1,7 +1,5 @@
 #pragma once
 
-#include <stdint.h>
-
 /**
  * @brief Gestisce condizioni di sicurezza a runtime: temperatura, timeout, comandi critici.
  */
@@ -48,7 +46,7 @@ namespace SafetyManager {
 
     const char *getErrorReason();
 
-    unsigned long getErrorTimestamp();
+    uint32_t getErrorTimestamp();
 
     bool isInErrorState();
 }
