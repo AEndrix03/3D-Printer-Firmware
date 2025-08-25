@@ -1,45 +1,12 @@
 #pragma once
 
-/**
- * @brief Gestisce condizioni di sicurezza a runtime: temperatura, timeout, comandi critici.
- */
 namespace SafetyManager {
-    /**
-     * @brief Inizializza il modulo di sicurezza.
-     */
     void init();
 
-    /**
-     * @brief Deve essere chiamata regolarmente nel loop per monitorare stato e sicurezza.
-     */
     void update();
 
-    /**
-     * @brief Notifica un comando ricevuto con timestamp aggiornato.
-     * Serve per controllare eventuali timeout.
-     */
     void notifyCommandReceived();
 
-    /**
-     * @brief Restituisce true se è stato raggiunto un timeout senza comandi.
-     */
-    bool hasTimedOut();
-
-    /**
-     * @brief Verifica se ci sono condizioni critiche attive (es. temperatura alta).
-     * @return true se è presente una condizione pericolosa
-     */
-    bool hasCriticalCondition();
-
-    /**
-     * @brief Verifica se alcuni endstop sono attivi durante modalità critiche come la stampa.
-     * @return true se è attivo uno o più endstop quando lo stato è Printing
-     */
-    bool isAnyEndstopTriggered();
-
-    /**
-     * @brief Applica logica di emergenza in caso di problemi.
-     */
     void emergencyStop(const char *reason);
 
     bool clearError();
@@ -49,4 +16,46 @@ namespace SafetyManager {
     uint32_t getErrorTimestamp();
 
     bool isInErrorState();
+
+    bool hasCriticalCondition();
+
+    bool isAnyEndstopTriggered();
+
+    // Power Management Functions
+    enum PowerState : uint8_t { ACTIVE = 0, IDLE = 1, SLEEP = 2, DEEP_SLEEP = 3 };
+
+    /**
+        * @brief Gestisce transizioni automatiche tra stati di alimentazione
+        */
+    void updatePowerManagement();
+
+    /**
+        * @brief Forza un specifico stato di alimentazione
+        */
+    void forcePowerState(PowerState state);
+
+    /**
+        * @brief Entra in uno stato di risparmio energetico
+        */
+    void enterPowerState(PowerState newState);
+
+    /**
+        * @brief Riattiva tutti i sistemi dallo stato di risparmio
+        */
+    void wakeUp();
+
+    /**
+        * @brief Restituisce lo stato di alimentazione corrente
+        */
+    PowerState getPowerState();
+
+    /**
+     * @brief Restituisce il nome dello stato di alimentazione
+     */
+    const char *getPowerStateName();
+
+    /**
+     * @brief Tempo di inattività in secondi
+     */
+    uint16_t getInactiveTime();
 }

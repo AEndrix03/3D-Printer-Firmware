@@ -49,4 +49,9 @@ namespace SystemController {
     void clearError();
 
     void printErrorStatus();
+
+    /**
+     * @brief S8 - Mostra stato power management
+     */
+    void printPowerStatus();
 }

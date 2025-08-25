@@ -1,53 +1,169 @@
+// SafetyManager.cpp - Syntax Errors Fixed
 #include <Arduino.h>
 #include "./include/SafetyManager.hpp"
 #include "./include/controllers/TempController.hpp"
 #include "./include/controllers/MotionController.hpp"
 #include "./include/controllers/EndstopController.hpp"
+#include "./include/controllers/FanController.hpp"
 #include "./include/StateMachine.hpp"
 #include "./include/Pins.hpp"
-#include "include/controllers/FanController.hpp"
 
-#include "./include/TimeUtils.hpp"
+#define IDLE_TIMEOUT_S 300
+#define SLEEP_TIMEOUT_S 1800
+#define DEEP_SLEEP_TIMEOUT_S 7200
 
 namespace {
-    uint32_t lastCommandTime = 0;
+    uint16_t lastCommandTime_s = 0;
 
     struct ErrorState {
         bool active = false;
-        uint32_t timestamp = 0;
+        uint16_t timestamp_s = 0;
         char reason[12] = {0};
     };
 
+    struct PowerManager {
+        SafetyManager::PowerState currentState = SafetyManager::ACTIVE;
+        uint16_t stateEntered_s = 0;
+        uint8_t flags = 0;
+    };
+
     ErrorState currentError;
+    PowerManager pm;
 }
 
 namespace SafetyManager {
     void init() {
-        lastCommandTime = millis();
+        lastCommandTime_s = millis() / 1000;
+        pm.currentState = ACTIVE;
+        pm.stateEntered_s = lastCommandTime_s;
+        pm.flags = 0;
     }
 
     void update() {
+        updatePowerManagement();
         TempController::updateThermalProtection();
 
         if (hasCriticalCondition()) {
-            emergencyStop("TEMP_OVERLIMIT");
+            emergencyStop("TEMP_HIGH");
         }
 
         if (isAnyEndstopTriggered()) {
-            emergencyStop("ENDSTOP_HIT");
+            emergencyStop("ENDSTOP");
             EndstopController::handle(10, nullptr);
         }
     }
 
     void notifyCommandReceived() {
-        lastCommandTime = millis();
+        uint16_t now_s = millis() / 1000;
+        lastCommandTime_s = now_s;
+        if (pm.currentState != ACTIVE) {
+            wakeUp();
+        }
+    }
+
+    void updatePowerManagement() {
+        uint16_t now_s = millis() / 1000;
+        uint16_t inactiveTime_s = now_s - lastCommandTime_s;
+
+        MachineState state = StateMachine::getState();
+        if (state == MachineState::Printing || state == MachineState::Homing ||
+            state == MachineState::Error) {
+            return;
+        }
+
+        PowerState targetState = ACTIVE;
+        if (inactiveTime_s >= DEEP_SLEEP_TIMEOUT_S) {
+            targetState = DEEP_SLEEP;
+        } else if (inactiveTime_s >= SLEEP_TIMEOUT_S
+        ) {
+            targetState = SLEEP;
+        } else if (inactiveTime_s >= IDLE_TIMEOUT_S) {
+            targetState = IDLE;
+        }
+
+        if (targetState != pm.currentState) {
+            enterPowerState(targetState);
+        }
+    }
+
+    void enterPowerState(PowerState newState) {
+        switch (newState) {
+            case IDLE:
+                Serial.println(F("IDLE MODE"));
+                FanController::setSpeed(32);
+            //TODO: LED dimming
+                pm.flags = 0;
+                break;
+            case SLEEP:
+                Serial.println(F("SLEEP MODE"));
+                MotionController::emergencyStop();
+                pm.flags |= 0x01;
+                if (TempController::getTemperature() <= 25.0f) {
+                    TempController::setTargetTemperature(0);
+                    pm.flags |= 0x02;
+                }
+                FanController::setSpeed(16);
+            //TODO: ADC power-down
+                break;
+            case DEEP_SLEEP:
+                Serial.println(F("DEEP SLEEP"));
+                digitalWrite(PIN_HEATER, LOW);
+                pm.flags |= 0x02;
+                FanController::setSpeed(0);
+            //TODO: CPU frequency reduction
+                pm.flags |= 0x04;
+                break;
+            case ACTIVE:
+                break;
+        }
+        pm.currentState = newState;
+        pm.stateEntered_s = millis() / 1000;
+    }
+
+    void wakeUp() {
+        if (pm.currentState == ACTIVE) return;
+        Serial.print(F("WAKE FROM "));
+        Serial.println((int) pm.currentState);
+        if (pm.flags & 0x01) {
+            MotionController::init();
+        }
+        //TODO: Re-enable full ADC
+        //TODO: Restore CPU frequency
+        pm.currentState = ACTIVE;
+        pm.stateEntered_s = millis() / 1000;
+        pm.flags = 0;
+    }
+
+    PowerState getPowerState() {
+        return pm.currentState;
+    }
+
+    const char *getPowerStateName() {
+        switch (pm.currentState) {
+            case ACTIVE: return "Active";
+            case IDLE: return "Idle";
+            case SLEEP: return "Sleep";
+            case DEEP_SLEEP: return "Deep";
+            default: return "?";
+        }
+    }
+
+    uint16_t getInactiveTime() {
+        return (millis() / 1000) - lastCommandTime_s;
+    }
+
+    void forcePowerState(PowerState state) {
+        enterPowerState(state);
     }
 
     void emergencyStop(const char *reason) {
+        if (pm.currentState != ACTIVE) {
+            wakeUp();
+        }
         currentError.active = true;
-        currentError.timestamp = millis();
+        currentError.timestamp_s = millis() / 1000;
         strncpy(currentError.reason, reason, sizeof(currentError.reason) - 1);
-        Serial.print(F("!!! EMERGENCY: "));
+        Serial.print(F("!!! "));
         Serial.println(reason);
         digitalWrite(PIN_HEATER, LOW);
         MotionController::emergencyStop();
@@ -60,22 +176,23 @@ namespace SafetyManager {
     }
 
     const char *getErrorReason() {
-        return currentError.active ? currentError.reason : "No Error";
+        return currentError.active ? currentError.reason : "";
     }
 
     uint32_t getErrorTimestamp() {
-        return currentError.active ? TimeUtils::elapsed(currentError.timestamp) : 0;
+        return currentError.active ? (millis() / 1000 - currentError.timestamp_s) * 1000UL : 0;
     }
 
     bool clearError() {
         if (!currentError.active) return false;
+
         currentError.active = false;
-        currentError.timestamp = 0;
+        currentError.timestamp_s = 0;
         currentError.reason[0] = '\0';
 
         if (StateMachine::getState() == MachineState::Error) {
             StateMachine::setState(MachineState::Idle);
-            Serial.println(F("ERROR CLEARED"));
+            Serial.println(F("ERR CLEARED"));
             return true;
         }
         return false;

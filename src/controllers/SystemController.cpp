@@ -31,8 +31,26 @@ namespace SystemController {
                 break;
             case 7:
                 printErrorStatus();
+                break;
+            case 8:
+                printPowerStatus();
+                break;
+            case 9: {
+                const char *p = strchr(params, 'P');
+                if (p) {
+                    int state = atoi(p + 1);
+                    if (state >= 0 && state <= 3) {
+                        SafetyManager::forcePowerState((SafetyManager::PowerState) state);
+                    }
+                }
+                break;
+            }
             case 10:
                 printStatus();
+                break;
+            default:
+                Serial.print(F("Unknown S-code: S"));
+                Serial.println(code);
                 break;
         }
     }
@@ -105,5 +123,13 @@ namespace SystemController {
             StateMachine::setState(MachineState::Idle);
             Serial.println(F("HOMING COMPLETE. STATE -> IDLE"));
         }
+    }
+
+    void printPowerStatus() {
+        Serial.print(F("POWER: "));
+        Serial.print(SafetyManager::getPowerStateName());
+        Serial.print(F(" INACTIVE: "));
+        Serial.print(SafetyManager::getInactiveTime());
+        Serial.println(F("s"));
     }
 }
