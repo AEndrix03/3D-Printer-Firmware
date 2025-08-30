@@ -1,18 +1,18 @@
-#include <avr/wdt.h>
 #include "./include/WatchdogHandler.hpp"
+#include "./include/hal/McuHAL.hpp"
 
 namespace WatchdogHandler {
 
     void enable() {
-        wdt_enable(WDTO_2S); // 2 secondi
+        hal::watchdog::enable(2000); // 2 seconds timeout
     }
 
     void disable() {
-        wdt_disable();
+        hal::watchdog::disable();
     }
 
     void reset() {
-        wdt_reset();
+        hal::watchdog::reset();
     }
 
 }

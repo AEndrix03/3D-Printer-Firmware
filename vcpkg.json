@@ -1,0 +1,54 @@
+{
+  "name": "3d-printer-firmware",
+  "version": "1.0.0",
+  "description": "Modern 3D Printer Firmware with HAL support for multiple platforms",
+  "homepage": "https://github.com/AEndrix03/3D-Printer-Firmware",
+  "license": "MIT",
+  "dependencies": [
+    {
+      "name": "gtest",
+      "platform": "native"
+    },
+    {
+      "name": "spdlog",
+      "platform": "native"
+    }
+  ],
+  "features": {
+    "arduino": {
+      "description": "Build for Arduino AVR platform",
+      "dependencies": [
+        {
+          "name": "arduino-core-avr",
+          "platform": "!native"
+        }
+      ]
+    },
+    "esp32": {
+      "description": "Build for ESP32 platform",
+      "dependencies": [
+        {
+          "name": "arduino-esp32",
+          "platform": "!native"
+        },
+        {
+          "name": "esp-idf",
+          "platform": "!native"
+        }
+      ]
+    },
+    "tests": {
+      "description": "Enable unit tests",
+      "dependencies": [
+        "gtest",
+        "gmock"
+      ]
+    },
+    "debug": {
+      "description": "Enable debug features and logging",
+      "dependencies": [
+        "spdlog"
+      ]
+    }
+  }
+}

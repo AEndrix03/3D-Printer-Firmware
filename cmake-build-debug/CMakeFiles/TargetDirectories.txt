@@ -1,3 +1,8 @@
-D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/3D-Printer-Firmware.dir
+D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/3dp_firmware_lib.dir
+D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/3dp_firmware.dir
 D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/edit_cache.dir
 D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/list_install_components.dir
+D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/install.dir
+D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/install/local.dir
+D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug/CMakeFiles/install/strip.dir

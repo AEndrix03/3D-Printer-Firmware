@@ -1,6 +1,5 @@
-// SafetyManager.cpp - Syntax Errors Fixed
-#include <Arduino.h>
 #include "./include/SafetyManager.hpp"
+#include "./include/hal/McuHAL.hpp"
 #include "./include/controllers/TempController.hpp"
 #include "./include/controllers/MotionController.hpp"
 #include "./include/controllers/EndstopController.hpp"
@@ -33,7 +32,7 @@ namespace {
 
 namespace SafetyManager {
     void init() {
-        lastCommandTime_s = millis() / 1000;
+        lastCommandTime_s = hal::millis() / 1000;
         pm.currentState = ACTIVE;
         pm.stateEntered_s = lastCommandTime_s;
         pm.flags = 0;
@@ -54,7 +53,7 @@ namespace SafetyManager {
     }
 
     void notifyCommandReceived() {
-        uint16_t now_s = millis() / 1000;
+        uint16_t now_s = hal::millis() / 1000;
         lastCommandTime_s = now_s;
         if (pm.currentState != ACTIVE) {
             wakeUp();
@@ -62,7 +61,7 @@ namespace SafetyManager {
     }
 
     void updatePowerManagement() {
-        uint16_t now_s = millis() / 1000;
+        uint16_t now_s = hal::millis() / 1000;
         uint16_t inactiveTime_s = now_s - lastCommandTime_s;
 
         MachineState state = StateMachine::getState();
@@ -74,8 +73,7 @@ namespace SafetyManager {
         PowerState targetState = ACTIVE;
         if (inactiveTime_s >= DEEP_SLEEP_TIMEOUT_S) {
             targetState = DEEP_SLEEP;
-        } else if (inactiveTime_s >= SLEEP_TIMEOUT_S
-        ) {
+        } else if (inactiveTime_s >= SLEEP_TIMEOUT_S) {
             targetState = SLEEP;
         } else if (inactiveTime_s >= IDLE_TIMEOUT_S) {
             targetState = IDLE;
@@ -89,13 +87,12 @@ namespace SafetyManager {
     void enterPowerState(PowerState newState) {
         switch (newState) {
             case IDLE:
-                Serial.println(F("IDLE MODE"));
+                hal::serial->println(F("IDLE MODE"));
                 FanController::setSpeed(32);
-            //TODO: LED dimming
                 pm.flags = 0;
                 break;
             case SLEEP:
-                Serial.println(F("SLEEP MODE"));
+                hal::serial->println(F("SLEEP MODE"));
                 MotionController::emergencyStop();
                 pm.flags |= 0x01;
                 if (TempController::getTemperature() <= 25.0f) {
@@ -103,34 +100,30 @@ namespace SafetyManager {
                     pm.flags |= 0x02;
                 }
                 FanController::setSpeed(16);
-            //TODO: ADC power-down
                 break;
             case DEEP_SLEEP:
-                Serial.println(F("DEEP SLEEP"));
-                digitalWrite(PIN_HEATER, LOW);
+                hal::serial->println(F("DEEP SLEEP"));
+                hal::writeDigital(PIN_HEATER, false);
                 pm.flags |= 0x02;
                 FanController::setSpeed(0);
-            //TODO: CPU frequency reduction
                 pm.flags |= 0x04;
                 break;
             case ACTIVE:
                 break;
         }
         pm.currentState = newState;
-        pm.stateEntered_s = millis() / 1000;
+        pm.stateEntered_s = hal::millis() / 1000;
     }
 
     void wakeUp() {
         if (pm.currentState == ACTIVE) return;
-        Serial.print(F("WAKE FROM "));
-        Serial.println((int) pm.currentState);
+        hal::serial->print(F("WAKE FROM "));
+        hal::serial->println((int) pm.currentState);
         if (pm.flags & 0x01) {
             MotionController::init();
         }
-        //TODO: Re-enable full ADC
-        //TODO: Restore CPU frequency
         pm.currentState = ACTIVE;
-        pm.stateEntered_s = millis() / 1000;
+        pm.stateEntered_s = hal::millis() / 1000;
         pm.flags = 0;
     }
 
@@ -140,16 +133,21 @@ namespace SafetyManager {
 
     const char *getPowerStateName() {
         switch (pm.currentState) {
-            case ACTIVE: return "Active";
-            case IDLE: return "Idle";
-            case SLEEP: return "Sleep";
-            case DEEP_SLEEP: return "Deep";
-            default: return "?";
+            case ACTIVE:
+                return "Active";
+            case IDLE:
+                return "Idle";
+            case SLEEP:
+                return "Sleep";
+            case DEEP_SLEEP:
+                return "Deep";
+            default:
+                return "?";
         }
     }
 
     uint16_t getInactiveTime() {
-        return (millis() / 1000) - lastCommandTime_s;
+        return (hal::millis() / 1000) - lastCommandTime_s;
     }
 
     void forcePowerState(PowerState state) {
@@ -161,11 +159,11 @@ namespace SafetyManager {
             wakeUp();
         }
         currentError.active = true;
-        currentError.timestamp_s = millis() / 1000;
+        currentError.timestamp_s = hal::millis() / 1000;
         strncpy(currentError.reason, reason, sizeof(currentError.reason) - 1);
-        Serial.print(F("!!! "));
-        Serial.println(reason);
-        digitalWrite(PIN_HEATER, LOW);
+        hal::serial->print(F("!!! "));
+        hal::serial->println(reason);
+        hal::writeDigital(PIN_HEATER, false);
         MotionController::emergencyStop();
         FanController::setSpeed(0);
         StateMachine::setState(MachineState::Error);
@@ -180,7 +178,7 @@ namespace SafetyManager {
     }
 
     uint32_t getErrorTimestamp() {
-        return currentError.active ? (millis() / 1000 - currentError.timestamp_s) * 1000UL : 0;
+        return currentError.active ? (hal::millis() / 1000 - currentError.timestamp_s) * 1000UL : 0;
     }
 
     bool clearError() {
@@ -192,7 +190,7 @@ namespace SafetyManager {
 
         if (StateMachine::getState() == MachineState::Error) {
             StateMachine::setState(MachineState::Idle);
-            Serial.println(F("ERR CLEARED"));
+            hal::serial->println(F("ERR CLEARED"));
             return true;
         }
         return false;

@@ -1,16 +1,20 @@
-// ArduinoHAL.cpp
-#include "../../include/hal/arduino/ArduinoHAL.hpp"
+//
+// Created by redeg on 30/08/2025.
+//
+// ESP32HAL.cpp
+#include "../../include/hal/esp32/ESP32HAL.hpp"
 #include <Arduino.h>
-#include <avr/wdt.h>
+#include <esp_system.h>
+#include <esp_task_wdt.h>
 
 namespace hal {
 
-    // Serial implementation for Arduino
-    class ArduinoSerial : public Serial {
+    // Serial implementation for ESP32
+    class ESP32Serial : public Serial {
     public:
         void begin(uint32_t baud) override {
             ::Serial.begin(baud);
-            while (!::Serial); // Wait for USB serial
+            // ESP32 doesn't need to wait for USB
         }
 
         void end() override {
@@ -74,8 +78,8 @@ namespace hal {
         }
     };
 
-    static ArduinoSerial arduinoSerial;
-    Serial *serial = &arduinoSerial;
+    static ESP32Serial esp32Serial;
+    Serial *serial = &esp32Serial;
 
     // ===== GPIO =====
     void pinMode(uint8_t pin, PinMode mode) {
@@ -90,8 +94,7 @@ namespace hal {
                 ::pinMode(pin, INPUT_PULLUP);
                 break;
             case INPUT_PULLDOWN:
-                // Arduino UNO doesn't support INPUT_PULLDOWN
-                ::pinMode(pin, INPUT);
+                ::pinMode(pin, INPUT_PULLDOWN);
                 break;
         }
     }
@@ -110,7 +113,17 @@ namespace hal {
     }
 
     void writePwm(uint8_t pin, uint8_t value) {
-        ::analogWrite(pin, value);
+        // ESP32 uses ledcWrite for PWM
+        static uint8_t channels[40] = {0};
+        static bool initialized[40] = {false};
+
+        if (!initialized[pin]) {
+            ledcSetup(channels[pin], 5000, 8); // 5kHz, 8-bit resolution
+            ledcAttachPin(pin, channels[pin]);
+            initialized[pin] = true;
+        }
+
+        ledcWrite(channels[pin], value);
     }
 
     void setupPwm(uint8_t pin) {
@@ -136,54 +149,48 @@ namespace hal {
 
     // ===== Watchdog =====
     namespace watchdog {
-        void enable(uint16_t timeout_ms) {
-            // Map timeout to AVR watchdog values
-            uint8_t wdt_val;
-            if (timeout_ms <= 15) wdt_val = WDTO_15MS;
-            else if (timeout_ms <= 30) wdt_val = WDTO_30MS;
-            else if (timeout_ms <= 60) wdt_val = WDTO_60MS;
-            else if (timeout_ms <= 120) wdt_val = WDTO_120MS;
-            else if (timeout_ms <= 250) wdt_val = WDTO_250MS;
-            else if (timeout_ms <= 500) wdt_val = WDTO_500MS;
-            else if (timeout_ms <= 1000) wdt_val = WDTO_1S;
-            else if (timeout_ms <= 2000) wdt_val = WDTO_2S;
-            else if (timeout_ms <= 4000) wdt_val = WDTO_4S;
-            else wdt_val = WDTO_8S;
+        static esp_task_wdt_config_t wdt_config = {
+                .timeout_ms = 2000,
+                .idle_core_mask = 0,
+                .trigger_panic = true
+        };
 
-            wdt_enable(wdt_val);
+        void enable(uint16_t timeout_ms) {
+            wdt_config.timeout_ms = timeout_ms;
+            esp_task_wdt_init(&wdt_config);
+            esp_task_wdt_add(NULL);
         }
 
         void disable() {
-            wdt_disable();
+            esp_task_wdt_delete(NULL);
+            esp_task_wdt_deinit();
         }
 
         void reset() {
-            wdt_reset();
+            esp_task_wdt_reset();
         }
     }
 
     // ===== System =====
     void init() {
-        // Arduino init is done automatically
+        // ESP32 specific initialization
+        setCpuFrequencyMhz(240);
     }
 
     void reset() {
-        // Software reset for Arduino
-        asm volatile ("jmp 0");
+        esp_restart();
     }
 
     // ===== Platform specific =====
     const char *getPlatformName() {
-        return "Arduino AVR";
+        return "ESP32";
     }
 
     uint32_t getFreeHeap() {
-        extern int __heap_start, *__brkval;
-        int v;
-        return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
+        return ESP.getFreeHeap();
     }
 
     uint32_t getTotalHeap() {
-        return 2048; // Arduino UNO has 2KB SRAM
+        return ESP.getHeapSize();
     }
 }

@@ -1,60 +1,104 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 
 /**
  * @brief Hardware Abstraction Layer (HAL) - Interfaccia comune per accesso all'hardware MCU.
  *
- * Implementare questa interfaccia in modo specifico per ogni piattaforma:
+ * Implementare questa interfaccia per ogni piattaforma:
  * - ArduinoHAL
  * - ESP32HAL
  * - STM32HAL
  */
 namespace hal {
 
-    /**
-     * @brief Imposta lo stato logico di un pin digitale.
-     * @param pin Numero del pin
-     * @param value true = HIGH, false = LOW
-     */
+    // ===== GPIO =====
+    enum PinMode {
+        INPUT,
+        OUTPUT,
+        INPUT_PULLUP,
+        INPUT_PULLDOWN
+    };
+
+    void pinMode(uint8_t pin, PinMode mode);
+
     void writeDigital(uint8_t pin, bool value);
 
-    /**
-     * @brief Legge lo stato di un pin digitale.
-     * @param pin Numero del pin
-     * @return true = HIGH, false = LOW
-     */
     bool readDigital(uint8_t pin);
 
-    /**
-     * @brief Legge un valore analogico da un pin (es. termistore).
-     * @param pin Numero del pin analogico
-     * @return Valore da 0 a 1023 (per Arduino UNO)
-     */
+    // ===== Analog =====
     int readAnalog(uint8_t pin);
 
-    /**
-     * @brief Attende un numero di microsecondi.
-     * @param us Numero di microsecondi
-     */
-    void delayMicroseconds(uint32_t us);
-
-    /**
-     * @brief Imposta un pin in modalità output PWM.
-     * @param pin Pin da usare per PWM
-     */
-    void setupPwm(uint8_t pin);
-
-    /**
-     * @brief Scrive un valore PWM su un pin.
-     * @param pin Pin di uscita
-     * @param value Valore da 0 (off) a 255 (max duty)
-     */
     void writePwm(uint8_t pin, uint8_t value);
 
-    /**
-     * @brief Imposta un pin in modalità INPUT_PULLUP (default per finecorsa).
-     * @param pin Pin da configurare
-     */
-    void configureInputPullup(uint8_t pin);
+    void setupPwm(uint8_t pin);
+
+    // ===== Time =====
+    uint32_t millis();
+
+    uint32_t micros();
+
+    void delay(uint32_t ms);
+
+    void delayMicroseconds(uint32_t us);
+
+    // ===== Serial =====
+    class Serial {
+    public:
+        virtual void begin(uint32_t baud) = 0;
+
+        virtual void end() = 0;
+
+        virtual int available() = 0;
+
+        virtual int read() = 0;
+
+        virtual size_t write(uint8_t byte) = 0;
+
+        virtual size_t write(const uint8_t *buffer, size_t size) = 0;
+
+        virtual size_t print(const char *str) = 0;
+
+        virtual size_t println(const char *str) = 0;
+
+        virtual size_t print(int value) = 0;
+
+        virtual size_t println(int value) = 0;
+
+        virtual size_t print(float value, int decimals = 2) = 0;
+
+        virtual size_t println(float value, int decimals = 2) = 0;
+
+        virtual size_t print(uint32_t value) = 0;
+
+        virtual size_t println(uint32_t value) = 0;
+
+        virtual void flush() = 0;
+
+        virtual operator bool() = 0;
+    };
+
+    extern Serial *serial;
+
+    // ===== Watchdog =====
+    namespace watchdog {
+        void enable(uint16_t timeout_ms);
+
+        void disable();
+
+        void reset();
+    }
+
+    // ===== System =====
+    void init();
+
+    void reset();
+
+    // ===== Platform specific =====
+    const char *getPlatformName();
+
+    uint32_t getFreeHeap();
+
+    uint32_t getTotalHeap();
 }
