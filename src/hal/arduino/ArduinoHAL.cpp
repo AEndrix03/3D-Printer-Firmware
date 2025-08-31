@@ -1,5 +1,6 @@
 // ArduinoHAL.cpp
 #include "../../include/hal/arduino/ArduinoHAL.hpp"
+#include "include/hal/McuHAL.hpp"
 #include <Arduino.h>
 #include <avr/wdt.h>
 
