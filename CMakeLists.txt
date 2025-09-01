@@ -4,7 +4,7 @@ if (NOT DEFINED VCPKG_MANIFEST_INSTALL)
 endif ()
 
 cmake_minimum_required(VERSION 3.20)
-project(3DP_Driver_Core LANGUAGES CXX)
+project(3DP_Printer_Firmware LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

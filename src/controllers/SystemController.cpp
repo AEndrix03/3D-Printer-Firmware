@@ -1,9 +1,9 @@
 #include <Arduino.h>
-#include <avr/wdt.h>
 #include "../include/controllers/SystemController.hpp"
 #include "../include/controllers/MotionController.hpp"
 #include "../include/StateMachine.hpp"
 #include "../include/SafetyManager.hpp"
+#include "../include/hal/McuHAL.hpp"
 
 namespace SystemController {
     void handle(uint8_t code, const char *params) {
@@ -62,7 +62,7 @@ namespace SystemController {
 
     void reset() {
         Serial.println("BRUTAL RESET TRIGGERED");
-        asm volatile ("jmp 0");
+        hal::reset();
     }
 
     void startPrint() {
@@ -89,7 +89,7 @@ namespace SystemController {
     void emergencyReset() {
         Serial.println("FORCING RESET: EMERGENCY RESET TRIGGERED");
 
-        wdt_enable(WDTO_15MS);
+        hal::watchdog::enable(15);
         while (1);
     }
 

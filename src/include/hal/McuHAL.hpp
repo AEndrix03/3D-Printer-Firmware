@@ -3,25 +3,20 @@
 #include <stdint.h>
 #include <stddef.h>
 
-/**
- * @brief Hardware Abstraction Layer (HAL) - Interfaccia comune per accesso all'hardware MCU.
- *
- * Implementare questa interfaccia per ogni piattaforma:
- * - ArduinoHAL
- * - ESP32HAL
- * - STM32HAL
- */
+// Forward declare FlashStringHelper for F() macro support
+class __FlashStringHelper;
+
 namespace hal {
 
     // ===== GPIO =====
-    enum PinMode {
-        INPUT,
-        OUTPUT,
-        INPUT_PULLUP,
-        INPUT_PULLDOWN
+    enum HalPinMode {
+        HAL_INPUT,
+        HAL_OUTPUT,
+        HAL_INPUT_PULLUP,
+        HAL_INPUT_PULLDOWN
     };
 
-    void pinMode(uint8_t pin, PinMode mode);
+    void halPinMode(uint8_t pin, HalPinMode mode);
 
     void writeDigital(uint8_t pin, bool value);
 
@@ -35,11 +30,11 @@ namespace hal {
     void setupPwm(uint8_t pin);
 
     // ===== Time =====
-    uint32_t millis();
+    uint32_t halMillis();
 
-    uint32_t micros();
+    uint32_t halMicros();
 
-    void delay(uint32_t ms);
+    void halDelay(uint32_t ms);
 
     void delayMicroseconds(uint32_t us);
 
@@ -77,6 +72,11 @@ namespace hal {
         virtual void flush() = 0;
 
         virtual operator bool() = 0;
+
+        // F() macro support
+        virtual size_t print(const __FlashStringHelper *str) = 0;
+
+        virtual size_t println(const __FlashStringHelper *str) = 0;
     };
 
     extern Serial *serial;

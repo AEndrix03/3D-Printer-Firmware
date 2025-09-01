@@ -1,3 +1,7 @@
+/*
+ *
+ * DEPRECATED
+
 #include "./include/CommandHistory.hpp"
 #include <string.h>
 
@@ -47,3 +51,6 @@ namespace CommandHistory {
         head = 0;
     }
 }
+
+
+ */

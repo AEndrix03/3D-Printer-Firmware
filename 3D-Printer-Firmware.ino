@@ -1,6 +1,6 @@
-#ifdef PLATFORM_ESP32
+#ifdef PLATFORM_ARDUINO
 
-#include "include/Application.hpp"
+#include "src/include/Application.hpp"
 
 Application application;
 

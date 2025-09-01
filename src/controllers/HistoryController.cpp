@@ -1,3 +1,6 @@
+/*
+ *
+ *
 #include <Arduino.h>
 #include "./../include/controllers/HistoryController.hpp"
 #include "./../include/SerialCommandReceiver.hpp"
@@ -54,3 +57,5 @@ namespace HistoryController {
         }
     }
 }
+
+ */

@@ -60,7 +60,7 @@ void Application::init() {
     hal::watchdog::disable();
 
     hal::serial->println(F("Sistema pronto."));
-    lastReadyMessage = hal::millis();
+    lastReadyMessage = hal::halMillis();
 }
 
 void Application::loop() {
@@ -68,7 +68,7 @@ void Application::loop() {
 
     if (!systemReady && TimeUtils::hasElapsed(lastReadyMessage, READY_MESSAGE_INTERVAL)) {
         hal::serial->println(F("Sistema pronto."));
-        lastReadyMessage = hal::millis();
+        lastReadyMessage = hal::halMillis();
     }
 
     SerialCommandReceiver::update();

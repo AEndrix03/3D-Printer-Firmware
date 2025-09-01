@@ -2,3 +2,9 @@
 .qodo
 
 cmake-build-debug/
+
+.pio/build/esp32/
+
+.pio/build/
+
+build-Arduino-Release/

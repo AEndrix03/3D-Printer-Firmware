@@ -2,8 +2,6 @@
 
 #include "../include/controllers/MotionController.hpp"
 
-#include <avr/wdt.h>
-
 #include "../include/controllers/EndstopController.hpp"
 #include "../include/StateMachine.hpp"
 
@@ -15,6 +13,7 @@
 #include "../include/hal/drivers/stepper/A4988Stepper.hpp"
 #include "../include/motion/MotionPlanner.hpp"
 #include "../include/BusyHandler.hpp"
+#include "../include/hal/McuHAL.hpp"
 
 #define REQUIRE_STATE(validState) if (StateMachine::getState() != validState) { Serial.println(F("INVALID STATE")); return; }
 #define CHUNK_SIZE 64
@@ -76,7 +75,7 @@ namespace MotionController {
 
             /* ---- Refresh wathdog & machine state ---- */
             if ((i & (CHUNK_SIZE - 1)) == 0) {
-                wdt_reset();
+                hal::watchdog::reset();
                 SafetyManager::update();
             }
         }
@@ -217,7 +216,7 @@ namespace MotionController {
             (*stepsPositionTarget)--;
             BusyHandler::update();
             if ((steps & (CHUNK_SIZE - 1)) == 0) {
-                wdt_reset();
+                hal::watchdog::reset();
                 SafetyManager::update();
             }
             stepper.step();
@@ -235,7 +234,7 @@ namespace MotionController {
             (*stepsPositionTarget)--;
             BusyHandler::update();
             if ((steps & (CHUNK_SIZE - 1)) == 0) {
-                wdt_reset();
+                hal::watchdog::reset();
                 SafetyManager::update();
             }
 

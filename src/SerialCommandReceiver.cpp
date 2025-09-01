@@ -2,7 +2,6 @@
 #include "./include/SerialCommandReceiver.hpp"
 #include "./include/Types.hpp"
 #include "./include/CommandDispatcher.hpp"
-#include "./include/CommandHistory.hpp"
 #include "./include/SafetyManager.hpp"
 #include "./include/BusyHandler.hpp"
 #include "./include/Application.hpp"
@@ -11,6 +10,7 @@ uint32_t SerialCommandReceiver::lastCommandNumber = 0;
 
 namespace {
     char inputBuffer[48];
+    char outputBuffer[64]; // Buffer per output con checksum
     uint8_t bufferIndex = 0;
     bool firstCommandReceived = false;
 
@@ -29,9 +29,35 @@ namespace {
         return cs;
     }
 
+    // Nuova funzione per checksum in uscita
+    uint8_t computeOutputChecksum(const char *str) {
+        uint8_t cs = 0;
+        size_t len = strlen(str);
+
+        for (size_t i = 0; i < len; ++i) {
+            cs ^= (uint8_t) str[i];
+        }
+        return cs;
+    }
+
+    // Funzione per stampare con checksum automatico
+    void printWithChecksum(const char *message) {
+        uint8_t checksum = computeOutputChecksum(message);
+        snprintf(outputBuffer, sizeof(outputBuffer), "%s**%u", message, checksum);
+        Serial.println(outputBuffer);
+    }
+
+    // Overload per messaggi con numero
+    void printWithChecksum(const char *prefix, uint32_t number) {
+        snprintf(outputBuffer, sizeof(outputBuffer), "%s%lu", prefix, number);
+        uint8_t checksum = computeOutputChecksum(outputBuffer);
+        snprintf(outputBuffer, sizeof(outputBuffer), "%s%lu**%u", prefix, number, checksum);
+        Serial.println(outputBuffer);
+    }
+
     uint32_t extractNumber(const char *line) {
         if (line[0] != 'N') return 0;
-        return (uint32_t) atol(line + 1); // atoi -> atol per uint32_t
+        return (uint32_t) atol(line + 1);
     }
 
     char extractCategory(const char *line) {
@@ -56,18 +82,6 @@ namespace {
         return p ? (uint8_t) atoi(p + 1) : 0;
     }
 
-    void resend(uint32_t number) {
-        const char *cmd = CommandHistory::get(number);
-        if (cmd) {
-            Serial.print(F("RESEND N"));
-            Serial.println(number);
-            Serial.println(cmd);
-        } else {
-            Serial.print(F("RESEND FAILED N"));
-            Serial.println(number);
-        }
-    }
-
     bool isNextExpected(uint32_t received, uint32_t last) {
         return received == (last + 1);
     }
@@ -83,7 +97,7 @@ namespace {
 
     bool addCharToBuffer(char c) {
         if (bufferIndex >= sizeof(inputBuffer) - 1) {
-            Serial.println(F("ERR BUFFER_OVERFLOW"));
+            printWithChecksum("ERR BUFFER_OVERFLOW");
             resetBuffer();
             return false;
         }
@@ -101,7 +115,7 @@ void SerialCommandReceiver::update() {
 
             inputBuffer[bufferIndex] = '\0';
 
-            ParsedCommand cmd;
+            ParsedCommand cmd{};
             cmd.number = extractNumber(inputBuffer);
             cmd.category = extractCategory(inputBuffer);
             cmd.code = extractCode(inputBuffer);
@@ -116,31 +130,30 @@ void SerialCommandReceiver::update() {
                 }
 
                 if (isDuplicate(cmd.number, lastCommandNumber)) {
-                    Serial.print(F("DUPLICATE N"));
-                    Serial.println(cmd.number);
+                    printWithChecksum("DUPLICATE N", cmd.number);
                 } else if (!isNextExpected(cmd.number, lastCommandNumber)) {
                     uint32_t expected = lastCommandNumber + 1;
-                    resend(expected);
+                    printWithChecksum("RESEND N", expected);
                 } else {
                     lastCommandNumber = cmd.number;
                     SafetyManager::notifyCommandReceived();
                     BusyHandler::start();
                     CommandDispatcher::dispatch(cmd);
                     BusyHandler::stop();
-                    CommandHistory::store(cmd.number, inputBuffer);
-                    Serial.print(F("OK N"));
-                    Serial.println(cmd.number);
+                    printWithChecksum("OK N", cmd.number);
                 }
             } else {
-                Serial.print(F("ERR N"));
-                Serial.print(cmd.number);
-                Serial.print(F(" BAD_CHECKSUM. Requested: "));
-                Serial.print(cmd.checksum);
-                Serial.print(F(" Extracted: "));
-                Serial.println(extractProvidedChecksum(inputBuffer));
+                // Messaggio di errore più complesso - uso snprintf
+                snprintf(outputBuffer, sizeof(outputBuffer),
+                         "ERR N%u BAD_CHECKSUM. Requested: %u Extracted: %u",
+                         cmd.number, cmd.checksum, extractProvidedChecksum(inputBuffer));
+                uint8_t checksum = computeOutputChecksum(outputBuffer);
+                Serial.print(outputBuffer);
+                Serial.print("**");
+                Serial.println(checksum);
             }
 
-            resetBuffer(); // Usa la nuova funzione
+            resetBuffer();
         } else if (!addCharToBuffer(c)) {
             // Buffer overflow gestito in addCharToBuffer()
         }

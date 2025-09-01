@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 namespace SafetyManager {
     void init();
 
@@ -22,31 +24,36 @@ namespace SafetyManager {
     bool isAnyEndstopTriggered();
 
     // Power Management Functions
-    enum PowerState : uint8_t { ACTIVE = 0, IDLE = 1, SLEEP = 2, DEEP_SLEEP = 3 };
+    enum PowerState {
+        ACTIVE = 0,
+        IDLE = 1,
+        SLEEP = 2,
+        DEEP_SLEEP = 3
+    };
 
     /**
-        * @brief Gestisce transizioni automatiche tra stati di alimentazione
-        */
+     * @brief Gestisce transizioni automatiche tra stati di alimentazione
+     */
     void updatePowerManagement();
 
     /**
-        * @brief Forza un specifico stato di alimentazione
-        */
+     * @brief Forza un specifico stato di alimentazione
+     */
     void forcePowerState(PowerState state);
 
     /**
-        * @brief Entra in uno stato di risparmio energetico
-        */
+     * @brief Entra in uno stato di risparmio energetico
+     */
     void enterPowerState(PowerState newState);
 
     /**
-        * @brief Riattiva tutti i sistemi dallo stato di risparmio
-        */
+     * @brief Riattiva tutti i sistemi dallo stato di risparmio
+     */
     void wakeUp();
 
     /**
-        * @brief Restituisce lo stato di alimentazione corrente
-        */
+     * @brief Restituisce lo stato di alimentazione corrente
+     */
     PowerState getPowerState();
 
     /**

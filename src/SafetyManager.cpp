@@ -12,6 +12,9 @@
 #define DEEP_SLEEP_TIMEOUT_S 7200
 
 namespace {
+
+    using namespace hal;
+    
     uint16_t lastCommandTime_s = 0;
 
     struct ErrorState {
@@ -32,7 +35,7 @@ namespace {
 
 namespace SafetyManager {
     void init() {
-        lastCommandTime_s = hal::millis() / 1000;
+        lastCommandTime_s = hal::halMillis() / 1000;
         pm.currentState = ACTIVE;
         pm.stateEntered_s = lastCommandTime_s;
         pm.flags = 0;
@@ -53,7 +56,7 @@ namespace SafetyManager {
     }
 
     void notifyCommandReceived() {
-        uint16_t now_s = hal::millis() / 1000;
+        uint16_t now_s = hal::halMillis() / 1000;
         lastCommandTime_s = now_s;
         if (pm.currentState != ACTIVE) {
             wakeUp();
@@ -61,7 +64,7 @@ namespace SafetyManager {
     }
 
     void updatePowerManagement() {
-        uint16_t now_s = hal::millis() / 1000;
+        uint16_t now_s = hal::halMillis() / 1000;
         uint16_t inactiveTime_s = now_s - lastCommandTime_s;
 
         MachineState state = StateMachine::getState();
@@ -112,7 +115,7 @@ namespace SafetyManager {
                 break;
         }
         pm.currentState = newState;
-        pm.stateEntered_s = hal::millis() / 1000;
+        pm.stateEntered_s = hal::halMillis() / 1000;
     }
 
     void wakeUp() {
@@ -123,7 +126,7 @@ namespace SafetyManager {
             MotionController::init();
         }
         pm.currentState = ACTIVE;
-        pm.stateEntered_s = hal::millis() / 1000;
+        pm.stateEntered_s = hal::halMillis() / 1000;
         pm.flags = 0;
     }
 
@@ -147,7 +150,7 @@ namespace SafetyManager {
     }
 
     uint16_t getInactiveTime() {
-        return (hal::millis() / 1000) - lastCommandTime_s;
+        return (hal::halMillis() / 1000) - lastCommandTime_s;
     }
 
     void forcePowerState(PowerState state) {
@@ -159,7 +162,7 @@ namespace SafetyManager {
             wakeUp();
         }
         currentError.active = true;
-        currentError.timestamp_s = hal::millis() / 1000;
+        currentError.timestamp_s = hal::halMillis() / 1000;
         strncpy(currentError.reason, reason, sizeof(currentError.reason) - 1);
         hal::serial->print(F("!!! "));
         hal::serial->println(reason);
@@ -178,7 +181,7 @@ namespace SafetyManager {
     }
 
     uint32_t getErrorTimestamp() {
-        return currentError.active ? (hal::millis() / 1000 - currentError.timestamp_s) * 1000UL : 0;
+        return currentError.active ? (hal::halMillis() / 1000 - currentError.timestamp_s) * 1000UL : 0;
     }
 
     bool clearError() {
