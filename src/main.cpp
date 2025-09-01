@@ -1,5 +1,4 @@
-// Rename this file with the project folder name
-
+#include <Arduino.h>
 #include "src/include/Application.hpp"
 
 Application application;
