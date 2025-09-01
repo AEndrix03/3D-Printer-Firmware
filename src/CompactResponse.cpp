@@ -48,4 +48,14 @@ namespace CompactResponse {
     void sendNoCommand(ResponseCode code) {
         send(code, 0);
     }
+
+    void sendData(const char* dataType, const char* payload) {
+        char buffer[64];
+        snprintf(buffer, sizeof(buffer), "%s %s", dataType, payload);
+
+        uint8_t checksum = computeChecksum(buffer);
+        Serial.print(buffer);
+        Serial.print(F(" *"));
+        Serial.println(checksum);
+    }
 }

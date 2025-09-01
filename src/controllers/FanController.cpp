@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "../include/controllers/FanController.hpp"
 #include "../include/Pins.hpp"
+#include "../include/CompactResponse.hpp"
 
 namespace FanController {
     void init() {
@@ -9,12 +10,15 @@ namespace FanController {
     }
 
     void handle(uint8_t code, const char *params) {
-        // int -> uint8_t
         if (code == 10) {
             const char *p = strchr(params, 'S');
             if (p) {
-                uint8_t value = (uint8_t) atoi(p + 1); // Cast esplicito
+                uint8_t value = (uint8_t) atoi(p + 1);
                 setSpeed(value);
+
+                char fanData[8];
+                snprintf(fanData, sizeof(fanData), "%u", value);
+                CompactResponse::sendData("FAN", fanData);
             }
         }
     }

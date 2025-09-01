@@ -5,6 +5,7 @@
 #include "../include/motion/MotionPlanner.hpp"
 #include "../include/extruder/ExtruderConfig.hpp"
 #include "../include/BusyHandler.hpp"
+#include "../include/CompactResponse.hpp"
 #include <math.h>
 #include <Arduino.h>
 
@@ -14,7 +15,6 @@ namespace {
     float stepsPerMm = ExtruderConfig::STEPS_PER_MM_E;
 }
 
-
 namespace ExtruderController {
     void init() {
         stepperE.init(StepperConfig::STEPPER_INVERT_E);
@@ -22,11 +22,9 @@ namespace ExtruderController {
     }
 
     void move(float mm, float feedrate) {
-        Serial.print(F("EXTRUDING "));
-        Serial.print(mm);
-        Serial.print(F("mm @ "));
-        Serial.print(feedrate);
-        Serial.println(F(" mm/min"));
+        char moveData[32];
+        snprintf(moveData, sizeof(moveData), "%.2f %.0f", mm, feedrate);
+        CompactResponse::sendData("EXT", moveData);
 
         MotionCommand cmd = {0, 0, 0, feedrate};
         cmd.x = mm;
@@ -56,10 +54,9 @@ namespace ExtruderController {
     }
 
     void stepManual(int steps, bool direction) {
-        Serial.print(F("STEP MANUAL: "));
-        Serial.print(steps);
-        Serial.print(F(" steps "));
-        Serial.println(direction ? F("FORWARD") : F("BACKWARD"));
+        char stepData[24];
+        snprintf(stepData, sizeof(stepData), "%d %s", steps, direction ? "FWD" : "BWD");
+        CompactResponse::sendData("STP", stepData);
 
         stepperE.setDirection(direction);
         for (int i = 0; i < steps; ++i) {
@@ -74,31 +71,28 @@ namespace ExtruderController {
 
     void resetPosition() {
         currentPositionE = 0.0f;
-        Serial.println(F("Extruder position reset to 0.0"));
+        CompactResponse::sendData("RST", "0.0");
     }
 
     void setStepsPerMM(float newSteps) {
         stepsPerMm = newSteps;
-        Serial.print(F("Steps per mm updated: "));
-        Serial.println(stepsPerMm);
+        char stepsData[16];
+        snprintf(stepsData, sizeof(stepsData), "%.2f", stepsPerMm);
+        CompactResponse::sendData("SPM", stepsData);
     }
 
     void handle(uint8_t code, const char *params) {
         switch (code) {
             case 10: {
-                // A10 E10.0 F800
                 float mm = 0.0f, feedrate = 1000.0f;
                 const char *pe = strchr(params, 'E');
                 const char *pf = strchr(params, 'F');
                 if (pe) mm = atof(pe + 1);
                 if (pf) feedrate = atof(pf + 1);
-
                 move(mm, feedrate);
-
                 break;
             }
             case 11: {
-                // A11 E2.0 F1800 = retract
                 float mm = 2.0f, feedrate = 1800.0f;
                 const char *pe = strchr(params, 'E');
                 const char *pf = strchr(params, 'F');
@@ -108,7 +102,6 @@ namespace ExtruderController {
                 break;
             }
             case 12: {
-                // A12 E5.0 F1000 = purge
                 float mm = 5.0f, feedrate = 1000.0f;
                 const char *pe = strchr(params, 'E');
                 const char *pf = strchr(params, 'F');
@@ -118,7 +111,6 @@ namespace ExtruderController {
                 break;
             }
             case 13: {
-                // A13 S200 D1 = manual step
                 int steps = 100;
                 bool dir = true;
                 const char *ps = strchr(params, 'S');
@@ -129,12 +121,10 @@ namespace ExtruderController {
                 break;
             }
             case 14: {
-                // A14 = reset pos
                 resetPosition();
                 break;
             }
             case 15: {
-                // A15 S95.2 = set steps/mm
                 const char *ps = strchr(params, 'S');
                 if (ps) {
                     float val = atof(ps + 1);
@@ -142,19 +132,25 @@ namespace ExtruderController {
                 }
                 break;
             }
+            case 16: {
+                // A16: Get current position
+                char posData[16];
+                snprintf(posData, sizeof(posData), "%.2f", currentPositionE);
+                CompactResponse::sendData("EPO", posData);
+                break;
+            }
             case 0: {
                 emergencyStop();
                 break;
             }
-
             default:
-                Serial.print(F("Unknown A-code for Extrusion: A"));
-                Serial.println(code);
+                CompactResponse::sendData("ERR", "UNK_ACODE");
                 break;
         }
     }
 
     void emergencyStop() {
         stepperE.enable(false);
+        CompactResponse::sendData("STP", "EMG");
     }
 }

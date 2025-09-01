@@ -4,6 +4,7 @@
 #include "../include/StateMachine.hpp"
 #include "../include/SafetyManager.hpp"
 #include "../include/hal/McuHAL.hpp"
+#include "../include/CompactResponse.hpp"
 
 namespace SystemController {
     void handle(uint8_t code, const char *params) {
@@ -49,87 +50,90 @@ namespace SystemController {
                 printStatus();
                 break;
             default:
-                Serial.print(F("Unknown S-code: S"));
-                Serial.println(code);
+                CompactResponse::sendData("ERR", "UNK_SCODE");
                 break;
         }
     }
 
     void printStatus() {
-        Serial.print(F("STATE: "));
-        Serial.println(StateMachine::getStateName());
+        CompactResponse::sendData("STA", StateMachine::getStateName());
     }
 
     void reset() {
-        Serial.println("BRUTAL RESET TRIGGERED");
+        CompactResponse::sendData("RST", "BRUTAL");
         hal::reset();
     }
 
     void startPrint() {
         if (StateMachine::getState() == MachineState::Idle) {
             StateMachine::setState(MachineState::Printing);
-            Serial.println(F("STATE -> PRINTING"));
+            CompactResponse::sendData("STA", "PRINTING");
+        } else {
+            CompactResponse::sendData("ERR", "NOT_IDLE");
         }
     }
 
     void pause() {
         if (StateMachine::getState() == MachineState::Printing) {
             StateMachine::setState(MachineState::Paused);
-            Serial.println(F("STATE -> PAUSED"));
+            CompactResponse::sendData("STA", "PAUSED");
+        } else {
+            CompactResponse::sendData("ERR", "NOT_PRINTING");
         }
     }
 
     void resume() {
         if (StateMachine::getState() == MachineState::Paused) {
             StateMachine::setState(MachineState::Printing);
-            Serial.println(F("STATE -> RESUME PRINTING"));
+            CompactResponse::sendData("STA", "RESUMED");
+        } else {
+            CompactResponse::sendData("ERR", "NOT_PAUSED");
         }
     }
 
     void emergencyReset() {
-        Serial.println("FORCING RESET: EMERGENCY RESET TRIGGERED");
-
+        CompactResponse::sendData("RST", "EMERGENCY");
         hal::watchdog::enable(15);
         while (1);
     }
 
     void clearError() {
         if (SafetyManager::clearError()) {
-            Serial.println(F("Error cleared successfully"));
+            CompactResponse::send(CompactResponse::CANCELLED_ERROR, 0);
         } else {
-            Serial.println(F("No active error to clear"));
+            CompactResponse::send(CompactResponse::NO_ERROR, 0);
         }
     }
 
     void printErrorStatus() {
         if (SafetyManager::isInErrorState()) {
-            Serial.print(F("ERROR ACTIVE: "));
-            Serial.print(SafetyManager::getErrorReason());
-            Serial.print(F(" (since: "));
-            Serial.print(SafetyManager::getErrorTimestamp());
-            Serial.println(F("ms)"));
+            char errorData[32];
+            snprintf(errorData, sizeof(errorData), "%s %lu",
+                     SafetyManager::getErrorReason(),
+                     SafetyManager::getErrorTimestamp());
+            CompactResponse::sendData("ERR", errorData);
         } else {
-            Serial.println(F("NO ERROR"));
+            CompactResponse::sendData("ERR", "NONE");
         }
     }
 
     void homing() {
         if (StateMachine::getState() == MachineState::Idle) {
-            Serial.println(F("STARTING HOMING..."));
+            CompactResponse::sendData("HOM", "START");
             StateMachine::setState(MachineState::Homing);
-
             MotionController::homeAllAxes();
-
             StateMachine::setState(MachineState::Idle);
-            Serial.println(F("HOMING COMPLETE. STATE -> IDLE"));
+            CompactResponse::sendData("HOM", "DONE");
+        } else {
+            CompactResponse::sendData("ERR", "NOT_IDLE");
         }
     }
 
     void printPowerStatus() {
-        Serial.print(F("POWER: "));
-        Serial.print(SafetyManager::getPowerStateName());
-        Serial.print(F(" INACTIVE: "));
-        Serial.print(SafetyManager::getInactiveTime());
-        Serial.println(F("s"));
+        char powerData[16];
+        snprintf(powerData, sizeof(powerData), "%s %u",
+                 SafetyManager::getPowerStateName(),
+                 SafetyManager::getInactiveTime());
+        CompactResponse::sendData("PWR", powerData);
     }
 }

@@ -1,10 +1,7 @@
 #include <Arduino.h>
-
 #include "../include/controllers/MotionController.hpp"
-
 #include "../include/controllers/EndstopController.hpp"
 #include "../include/StateMachine.hpp"
-
 #include "../include/Pins.hpp"
 #include "../include/SafetyManager.hpp"
 #include "../include/motion/MotionConfig.hpp"
@@ -16,7 +13,8 @@
 #include "../include/hal/McuHAL.hpp"
 #include "../include/CompactResponse.hpp"
 
-#define REQUIRE_STATE(validState) if (StateMachine::getState() != validState) { Serial.println(F("INVALID STATE")); return; }
+#define REQUIRE_STATE(validState) if (StateMachine::getState() != validState) { \
+    CompactResponse::sendData("ERR", "INV_STATE"); return; }
 #define CHUNK_SIZE 64
 
 namespace {
@@ -52,21 +50,18 @@ namespace MotionController {
         for (int i = 0; i < maxSteps; ++i) {
             BusyHandler::update();
 
-            /* ---- asse X ---- */
             if (i < plan.stepsX) {
                 if (EndstopController::isTriggeredX()) break;
                 stepperX.step();
                 delayMicroseconds(plan.delayMicrosX);
                 currentPosition.x += (plan.dirX ? 1 : -1);
             }
-            /* ---- asse Y ---- */
             if (i < plan.stepsY) {
                 if (EndstopController::isTriggeredY()) break;
                 stepperY.step();
                 delayMicroseconds(plan.delayMicrosY);
                 currentPosition.y += (plan.dirY ? 1 : -1);
             }
-            /* ---- asse Z ---- */
             if (i < plan.stepsZ) {
                 if (EndstopController::isTriggeredZ()) break;
                 stepperZ.step();
@@ -74,7 +69,6 @@ namespace MotionController {
                 currentPosition.z += (plan.dirZ ? 1 : -1);
             }
 
-            /* ---- Refresh wathdog & machine state ---- */
             if ((i & (CHUNK_SIZE - 1)) == 0) {
                 hal::watchdog::reset();
                 SafetyManager::update();
@@ -84,22 +78,17 @@ namespace MotionController {
 
     void goTo(float targetX, float targetY, float targetZ, float feedrate) {
         position::Position current = getPosition();
-
         float dx = ((targetX * MotionConfig::STEPS_PER_MM_X) - ((float) current.x)) / MotionConfig::STEPS_PER_MM_X;
         float dy = ((targetY * MotionConfig::STEPS_PER_MM_Y) - ((float) current.y)) / MotionConfig::STEPS_PER_MM_Y;
         float dz = ((targetZ * MotionConfig::STEPS_PER_MM_Z) - ((float) current.z)) / MotionConfig::STEPS_PER_MM_Z;
-
         moveTo(dx, dy, dz, feedrate);
     }
 
-
     void emergencyStop() {
-        // Disabilita tutti i motori immediatamente
         stepperX.enable(false);
         stepperY.enable(false);
         stepperZ.enable(false);
-
-        Serial.println(F("MOTION EMERGENCY STOP"));
+        CompactResponse::sendData("STP", "EMG");
     }
 
     position::Position getPosition() {
@@ -108,9 +97,10 @@ namespace MotionController {
 
     void handle(uint8_t code, const char *params) {
         if (StateMachine::getState() == MachineState::Error && code != 0) {
-            CompactResponse::sendNoCommand(CompactResponse::BLOCKED_MOTION_ERROR);;
-            Serial.print(F("Use S6 to clear error. Reason: "));
-            Serial.println(SafetyManager::getErrorReason());
+            CompactResponse::sendNoCommand(CompactResponse::BLOCKED_MOTION_ERROR);
+            char errorData[16];
+            snprintf(errorData, sizeof(errorData), "%s", SafetyManager::getErrorReason());
+            CompactResponse::sendData("ERR", errorData);
             return;
         }
 
@@ -130,7 +120,6 @@ namespace MotionController {
                 break;
             }
             case 11: {
-                // Movimento assoluto: M11 X... Y... Z... F...
                 REQUIRE_STATE(MachineState::Printing);
                 float x = 0.0f, y = 0.0f, z = 0.0f, f = 1000.0f;
                 const char *px = strchr(params, 'X');
@@ -145,72 +134,61 @@ namespace MotionController {
                 break;
             }
             case 99: {
-                // Esempio: M99 X F800
                 const char *pa = strchr(params, 'X');
                 const char *pb = strchr(params, 'Y');
                 const char *pc = strchr(params, 'Z');
                 const char *pf = strchr(params, 'F');
-
                 float feedrate = 800.0f;
                 if (pf) feedrate = atof(pf + 1);
 
                 if (pa) {
                     diagnoseAxis(stepperX, EndstopController::isTriggeredX,
                                  HomingConfig::HOMING_X_BOUNCE_OFFSET,
-                                 MotionConfig::STEPS_PER_MM_X,
-                                 feedrate,
-                                 MotionConfig::MIN_FEEDRATE_X,
-                                 MotionConfig::MAX_FEEDRATE_X);
+                                 MotionConfig::STEPS_PER_MM_X, feedrate,
+                                 MotionConfig::MIN_FEEDRATE_X, MotionConfig::MAX_FEEDRATE_X);
                 } else if (pb) {
                     diagnoseAxis(stepperY, EndstopController::isTriggeredY,
                                  HomingConfig::HOMING_Y_BOUNCE_OFFSET,
-                                 MotionConfig::STEPS_PER_MM_Y,
-                                 feedrate,
-                                 MotionConfig::MIN_FEEDRATE_Y,
-                                 MotionConfig::MAX_FEEDRATE_Y);
+                                 MotionConfig::STEPS_PER_MM_Y, feedrate,
+                                 MotionConfig::MIN_FEEDRATE_Y, MotionConfig::MAX_FEEDRATE_Y);
                 } else if (pc) {
                     diagnoseAxis(stepperZ, EndstopController::isTriggeredZ,
                                  HomingConfig::HOMING_Z_BOUNCE_OFFSET,
-                                 MotionConfig::STEPS_PER_MM_Z,
-                                 feedrate,
-                                 MotionConfig::MIN_FEEDRATE_Z,
-                                 MotionConfig::MAX_FEEDRATE_Z);
+                                 MotionConfig::STEPS_PER_MM_Z, feedrate,
+                                 MotionConfig::MIN_FEEDRATE_Z, MotionConfig::MAX_FEEDRATE_Z);
                 } else {
-                    Serial.println(F("M99 ERROR: specify axis X, Y or Z"));
+                    CompactResponse::sendData("ERR", "NO_AXIS");
                 }
-
                 break;
             }
             case 114: {
-                // M114: stampa posizione corrente
                 position::Position pos = getPosition();
-                Serial.print(F("Position: X="));
-                Serial.print((pos.x / MotionConfig::STEPS_PER_MM_X));
-                Serial.print(F(" Y="));
-                Serial.print((pos.y / MotionConfig::STEPS_PER_MM_Y));
-                Serial.print(F(" Z="));
-                Serial.println((pos.z / MotionConfig::STEPS_PER_MM_Z));
+                char posData[32];
+                snprintf(posData, sizeof(posData), "%.2f %.2f %.2f",
+                         (pos.x / MotionConfig::STEPS_PER_MM_X),
+                         (pos.y / MotionConfig::STEPS_PER_MM_Y),
+                         (pos.z / MotionConfig::STEPS_PER_MM_Z));
+                CompactResponse::sendData("POS", posData);
                 break;
             }
             case 0:
                 emergencyStop();
                 break;
             default:
-                Serial.print(F("Unknown M-code: M"));
-                Serial.println(code);
+                CompactResponse::sendData("ERR", "UNK_MCODE");
                 break;
         }
     }
 
-    void homeAxis(A4988Stepper &stepper, bool (*isTriggered)(), float speedPerMm, float feedrate, float minRate,
-                  float maxRate, int *stepsPositionTarget) {
+    void homeAxis(A4988Stepper &stepper, bool (*isTriggered)(), float speedPerMm, float feedrate,
+                  float minRate, float maxRate, int *stepsPositionTarget) {
         if (isTriggered()) {
-            Serial.println(F("ENDSTOP ALREADY TRIGGERED"));
+            CompactResponse::sendData("HOM", "TRIGGERED");
             return;
         }
 
         stepper.setDirection(false);
-        int bouceSteps = HomingConfig::HOMING_BOUNCE_FEEDRATE;
+        int bounceSteps = HomingConfig::HOMING_BOUNCE_FEEDRATE;
         int steps = 0;
 
         while (!isTriggered()) {
@@ -226,19 +204,18 @@ namespace MotionController {
         }
 
         if (isTriggered()) {
-            Serial.println(F("ENDSTOP HIT"));
+            CompactResponse::sendData("HOM", "HIT");
         }
 
         steps = 0;
         stepper.setDirection(true);
-        while (steps < bouceSteps) {
+        while (steps < bounceSteps) {
             (*stepsPositionTarget)--;
             BusyHandler::update();
             if ((steps & (CHUNK_SIZE - 1)) == 0) {
                 hal::watchdog::reset();
                 SafetyManager::update();
             }
-
             stepper.step();
             delayMicroseconds(computeDelayMicros(feedrate, speedPerMm, minRate, maxRate));
             steps++;
@@ -255,31 +232,29 @@ namespace MotionController {
     void homeAllAxes() {
         REQUIRE_STATE(MachineState::Homing);
 
-        Serial.println(F("HOMING X..."));
+        CompactResponse::sendData("HOM", "X_START");
         homeAxis(stepperX, EndstopController::isTriggeredX, MotionConfig::STEPS_PER_MM_X,
-                 HomingConfig::HOMING_X_FEEDRATE,
-                 MotionConfig::MIN_FEEDRATE_X, MotionConfig::MAX_FEEDRATE_X, &currentPosition.x);
+                 HomingConfig::HOMING_X_FEEDRATE, MotionConfig::MIN_FEEDRATE_X,
+                 MotionConfig::MAX_FEEDRATE_X, &currentPosition.x);
 
-        Serial.println(F("HOMING Y..."));
+        CompactResponse::sendData("HOM", "Y_START");
         homeAxis(stepperY, EndstopController::isTriggeredY, MotionConfig::STEPS_PER_MM_Y,
-                 HomingConfig::HOMING_Y_FEEDRATE,
-                 MotionConfig::MIN_FEEDRATE_Y, MotionConfig::MAX_FEEDRATE_Y, &currentPosition.y);
+                 HomingConfig::HOMING_Y_FEEDRATE, MotionConfig::MIN_FEEDRATE_Y,
+                 MotionConfig::MAX_FEEDRATE_Y, &currentPosition.y);
 
-        Serial.println(F("HOMING Z..."));
+        CompactResponse::sendData("HOM", "Z_START");
         homeAxis(stepperZ, EndstopController::isTriggeredZ, MotionConfig::STEPS_PER_MM_Z,
-                 HomingConfig::HOMING_Z_FEEDRATE,
-                 MotionConfig::MIN_FEEDRATE_Z, MotionConfig::MAX_FEEDRATE_Z, &currentPosition.z);
+                 HomingConfig::HOMING_Z_FEEDRATE, MotionConfig::MIN_FEEDRATE_Z,
+                 MotionConfig::MAX_FEEDRATE_Z, &currentPosition.z);
 
-        Serial.println(F("HOMING COMPLETE"));
+        CompactResponse::sendData("HOM", "COMPLETE");
     }
 
-    void diagnoseAxis(A4988Stepper &stepper, bool (*isTriggered)(), float stepsPerMm, int bounceSteps, float feedrate,
-                      float minRate,
-                      float maxRate) {
+    void diagnoseAxis(A4988Stepper &stepper, bool (*isTriggered)(), float stepsPerMm,
+                      int bounceSteps, float feedrate, float minRate, float maxRate) {
         const float delayMicros = computeDelayMicros(feedrate, stepsPerMm, minRate, maxRate);
-        Serial.println(F("Diagnosing axis..."));
+        CompactResponse::sendData("DIG", "START");
 
-        // SALITA (verso endstop)
         stepper.setDirection(true);
         int upSteps = 0;
         while (!isTriggered() && upSteps < 50000) {
@@ -289,8 +264,9 @@ namespace MotionController {
             upSteps++;
         }
 
-        Serial.print(F("UP steps until endstop: "));
-        Serial.println(upSteps + bounceSteps);
+        char upData[16];
+        snprintf(upData, sizeof(upData), "UP_%d", upSteps + bounceSteps);
+        CompactResponse::sendData("DIG", upData);
 
         delay(200);
         stepper.setDirection(false);
@@ -299,7 +275,6 @@ namespace MotionController {
             stepper.step();
             delayMicroseconds(delayMicros);
         }
-        delay(200);
 
         int downSteps = 0;
         while (!isTriggered() && downSteps < 50000) {
@@ -316,11 +291,10 @@ namespace MotionController {
             stepper.step();
             delayMicroseconds(delayMicros);
         }
-        delay(200);
 
-        Serial.print(F("DOWN steps until endstop: "));
-        Serial.println(downSteps + bounceSteps);
-
-        Serial.println(F("Diagnosis complete"));
+        char downData[16];
+        snprintf(downData, sizeof(downData), "DN_%d", downSteps + bounceSteps);
+        CompactResponse::sendData("DIG", downData);
+        CompactResponse::sendData("DIG", "COMPLETE");
     }
 }

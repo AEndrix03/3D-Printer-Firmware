@@ -28,4 +28,7 @@ namespace CompactResponse {
     void send(ResponseCode code, uint32_t cmdNumber);
 
     void sendNoCommand(ResponseCode code);
+
+    void sendData(const char *dataType, const char *payload);
+
 }
