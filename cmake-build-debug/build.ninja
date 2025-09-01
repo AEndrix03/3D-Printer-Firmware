@@ -11,7 +11,7 @@
 # =============================================================================
 
 # =============================================================================
-# Project: 3DP_Driver_Core
+# Project: 3DP_Printer_Firmware
 # Configurations: Debug
 # =============================================================================
 
@@ -73,9 +73,9 @@ build CMakeFiles/3dp_firmware_lib.dir/src/CommandDispatcher.cpp.obj: CXX_COMPILE
   OBJECT_DIR = CMakeFiles\3dp_firmware_lib.dir
   OBJECT_FILE_DIR = CMakeFiles\3dp_firmware_lib.dir\src
 
-build CMakeFiles/3dp_firmware_lib.dir/src/CommandHistory.cpp.obj: CXX_COMPILER__3dp_firmware_lib_unscanned_Debug D$:/Progetti/Arduino/3D-Printer-Firmware/src/CommandHistory.cpp || cmake_object_order_depends_target_3dp_firmware_lib
+build CMakeFiles/3dp_firmware_lib.dir/src/CompactResponse.cpp.obj: CXX_COMPILER__3dp_firmware_lib_unscanned_Debug D$:/Progetti/Arduino/3D-Printer-Firmware/src/CompactResponse.cpp || cmake_object_order_depends_target_3dp_firmware_lib
   DEFINES = -DARDUINO=10805 -DARDUINO_AVR_UNO -DF_CPU=16000000L -D__AVR__
-  DEP_FILE = CMakeFiles\3dp_firmware_lib.dir\src\CommandHistory.cpp.obj.d
+  DEP_FILE = CMakeFiles\3dp_firmware_lib.dir\src\CompactResponse.cpp.obj.d
   FLAGS = -g -std=gnu++14 -fdiagnostics-color=always
   INCLUDES = -ID:/Progetti/Arduino/3D-Printer-Firmware/include -ID:/Progetti/Arduino/3D-Printer-Firmware/src -ID:/Progetti/Arduino/3D-Printer-Firmware/src/include/hal/arduino
   OBJECT_DIR = CMakeFiles\3dp_firmware_lib.dir
@@ -137,14 +137,6 @@ build CMakeFiles/3dp_firmware_lib.dir/src/controllers/FanController.cpp.obj: CXX
   OBJECT_DIR = CMakeFiles\3dp_firmware_lib.dir
   OBJECT_FILE_DIR = CMakeFiles\3dp_firmware_lib.dir\src\controllers
 
-build CMakeFiles/3dp_firmware_lib.dir/src/controllers/HistoryController.cpp.obj: CXX_COMPILER__3dp_firmware_lib_unscanned_Debug D$:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/HistoryController.cpp || cmake_object_order_depends_target_3dp_firmware_lib
-  DEFINES = -DARDUINO=10805 -DARDUINO_AVR_UNO -DF_CPU=16000000L -D__AVR__
-  DEP_FILE = CMakeFiles\3dp_firmware_lib.dir\src\controllers\HistoryController.cpp.obj.d
-  FLAGS = -g -std=gnu++14 -fdiagnostics-color=always
-  INCLUDES = -ID:/Progetti/Arduino/3D-Printer-Firmware/include -ID:/Progetti/Arduino/3D-Printer-Firmware/src -ID:/Progetti/Arduino/3D-Printer-Firmware/src/include/hal/arduino
-  OBJECT_DIR = CMakeFiles\3dp_firmware_lib.dir
-  OBJECT_FILE_DIR = CMakeFiles\3dp_firmware_lib.dir\src\controllers
-
 build CMakeFiles/3dp_firmware_lib.dir/src/controllers/MotionController.cpp.obj: CXX_COMPILER__3dp_firmware_lib_unscanned_Debug D$:/Progetti/Arduino/3D-Printer-Firmware/src/controllers/MotionController.cpp || cmake_object_order_depends_target_3dp_firmware_lib
   DEFINES = -DARDUINO=10805 -DARDUINO_AVR_UNO -DF_CPU=16000000L -D__AVR__
   DEP_FILE = CMakeFiles\3dp_firmware_lib.dir\src\controllers\MotionController.cpp.obj.d
@@ -193,6 +185,14 @@ build CMakeFiles/3dp_firmware_lib.dir/src/hal/esp32/ESP32HAL.cpp.obj: CXX_COMPIL
   OBJECT_DIR = CMakeFiles\3dp_firmware_lib.dir
   OBJECT_FILE_DIR = CMakeFiles\3dp_firmware_lib.dir\src\hal\esp32
 
+build CMakeFiles/3dp_firmware_lib.dir/src/main.cpp.obj: CXX_COMPILER__3dp_firmware_lib_unscanned_Debug D$:/Progetti/Arduino/3D-Printer-Firmware/src/main.cpp || cmake_object_order_depends_target_3dp_firmware_lib
+  DEFINES = -DARDUINO=10805 -DARDUINO_AVR_UNO -DF_CPU=16000000L -D__AVR__
+  DEP_FILE = CMakeFiles\3dp_firmware_lib.dir\src\main.cpp.obj.d
+  FLAGS = -g -std=gnu++14 -fdiagnostics-color=always
+  INCLUDES = -ID:/Progetti/Arduino/3D-Printer-Firmware/include -ID:/Progetti/Arduino/3D-Printer-Firmware/src -ID:/Progetti/Arduino/3D-Printer-Firmware/src/include/hal/arduino
+  OBJECT_DIR = CMakeFiles\3dp_firmware_lib.dir
+  OBJECT_FILE_DIR = CMakeFiles\3dp_firmware_lib.dir\src
+
 build CMakeFiles/3dp_firmware_lib.dir/src/motion/MotionPlanner.cpp.obj: CXX_COMPILER__3dp_firmware_lib_unscanned_Debug D$:/Progetti/Arduino/3D-Printer-Firmware/src/motion/MotionPlanner.cpp || cmake_object_order_depends_target_3dp_firmware_lib
   DEFINES = -DARDUINO=10805 -DARDUINO_AVR_UNO -DF_CPU=16000000L -D__AVR__
   DEP_FILE = CMakeFiles\3dp_firmware_lib.dir\src\motion\MotionPlanner.cpp.obj.d
@@ -209,7 +209,7 @@ build CMakeFiles/3dp_firmware_lib.dir/src/motion/MotionPlanner.cpp.obj: CXX_COMP
 #############################################
 # Link the static library lib3dp_firmware_lib.a
 
-build lib3dp_firmware_lib.a: CXX_STATIC_LIBRARY_LINKER__3dp_firmware_lib_Debug CMakeFiles/3dp_firmware_lib.dir/src/Application.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/BusyHandler.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/CommandDispatcher.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/CommandHistory.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/SafetyManager.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/SerialCommandReceiver.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/StateMachine.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/WatchdogHandler.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/controllers/EndstopController.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/controllers/ExtruderController.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/controllers/FanController.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/controllers/HistoryController.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/controllers/MotionController.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/controllers/SystemController.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/controllers/TempController.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/hal/arduino/ArduinoHAL.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/hal/drivers/stepper/A4988Stepper.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/hal/esp32/ESP32HAL.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/motion/MotionPlanner.cpp.obj
+build lib3dp_firmware_lib.a: CXX_STATIC_LIBRARY_LINKER__3dp_firmware_lib_Debug CMakeFiles/3dp_firmware_lib.dir/src/Application.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/BusyHandler.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/CommandDispatcher.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/CompactResponse.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/SafetyManager.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/SerialCommandReceiver.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/StateMachine.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/WatchdogHandler.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/controllers/EndstopController.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/controllers/ExtruderController.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/controllers/FanController.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/controllers/MotionController.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/controllers/SystemController.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/controllers/TempController.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/hal/arduino/ArduinoHAL.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/hal/drivers/stepper/A4988Stepper.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/hal/esp32/ESP32HAL.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/main.cpp.obj CMakeFiles/3dp_firmware_lib.dir/src/motion/MotionPlanner.cpp.obj
   LANGUAGE_COMPILE_FLAGS = -g
   OBJECT_DIR = CMakeFiles\3dp_firmware_lib.dir
   POST_BUILD = cd .

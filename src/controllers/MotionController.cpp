@@ -14,6 +14,7 @@
 #include "../include/motion/MotionPlanner.hpp"
 #include "../include/BusyHandler.hpp"
 #include "../include/hal/McuHAL.hpp"
+#include "../include/CompactResponse.hpp"
 
 #define REQUIRE_STATE(validState) if (StateMachine::getState() != validState) { Serial.println(F("INVALID STATE")); return; }
 #define CHUNK_SIZE 64
@@ -107,7 +108,7 @@ namespace MotionController {
 
     void handle(uint8_t code, const char *params) {
         if (StateMachine::getState() == MachineState::Error && code != 0) {
-            Serial.println(F("ERR MOTION_BLOCKED_ERROR_STATE"));
+            CompactResponse::sendNoCommand(CompactResponse::BLOCKED_MOTION_ERROR);;
             Serial.print(F("Use S6 to clear error. Reason: "));
             Serial.println(SafetyManager::getErrorReason());
             return;

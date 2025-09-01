@@ -6,6 +6,7 @@
 #include "./include/controllers/FanController.hpp"
 #include "./include/StateMachine.hpp"
 #include "./include/Pins.hpp"
+#include "include/CompactResponse.hpp"
 
 #define IDLE_TIMEOUT_S 300
 #define SLEEP_TIMEOUT_S 1800
@@ -14,7 +15,7 @@
 namespace {
 
     using namespace hal;
-    
+
     uint16_t lastCommandTime_s = 0;
 
     struct ErrorState {
@@ -193,7 +194,7 @@ namespace SafetyManager {
 
         if (StateMachine::getState() == MachineState::Error) {
             StateMachine::setState(MachineState::Idle);
-            hal::serial->println(F("ERR CLEARED"));
+            CompactResponse::sendNoCommand(CompactResponse::CANCELLED_ERROR);
             return true;
         }
         return false;

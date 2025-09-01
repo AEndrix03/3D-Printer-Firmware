@@ -6,6 +6,7 @@
 #include "./include/controllers/SystemController.hpp"
 #include "./include/controllers/EndstopController.hpp"
 #include "./include/controllers/ExtruderController.hpp"
+#include "./include/CompactResponse.hpp"
 
 void CommandDispatcher::dispatch(const ParsedCommand &cmd) {
     switch (cmd.category) {
@@ -27,13 +28,8 @@ void CommandDispatcher::dispatch(const ParsedCommand &cmd) {
         case 'E':
             EndstopController::handle(cmd.code, cmd.params);
             break;
-            /*case 'H':
-                HistoryController::handle(cmd.code, cmd.params);
-                break;*/
         default:
-            Serial.print(F("ERR N"));
-            Serial.print(cmd.number);
-            Serial.println(F(" UNKNOWN_CATEGORY"));
+            CompactResponse::send(CompactResponse::INVALID_CATEGORY_ERROR, cmd.number);
             break;
     }
 }

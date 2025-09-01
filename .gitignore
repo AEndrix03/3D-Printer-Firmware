@@ -8,3 +8,5 @@ cmake-build-debug/
 .pio/build/
 
 build-Arduino-Release/
+
+.idea/

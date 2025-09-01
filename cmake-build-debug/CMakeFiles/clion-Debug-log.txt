@@ -26,9 +26,9 @@ The package spdlog provides CMake targets:
     find_package(spdlog CONFIG REQUIRED)
     target_link_libraries(main PRIVATE spdlog::spdlog_header_only)
 
-All requested installations completed successfully in: 730 us
+All requested installations completed successfully in: 717 us
 -- Running vcpkg install - done
 -- Building for platform: ARDUINO
--- Configuring done (9.3s)
--- Generating done (0.0s)
+-- Configuring done (17.4s)
+-- Generating done (0.2s)
 -- Build files have been written to: D:/Progetti/Arduino/3D-Printer-Firmware/cmake-build-debug

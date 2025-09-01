@@ -7,6 +7,7 @@
 #include "../include/SafetyManager.hpp"
 #include "../include/StateMachine.hpp"
 #include "../include/TimeUtils.hpp"
+#include "../include/CompactResponse.hpp"
 
 // Constanti in PROGMEM per risparmiare RAM
 #define MAX_TEMP_C 280
@@ -97,7 +98,7 @@ namespace TempController {
 
     void handle(uint8_t code, const char *params) {
         if (StateMachine::getState() == MachineState::Error && code != 0 && code != 20) {
-            Serial.println(F("ERR BLOCKED"));
+            CompactResponse::sendNoCommand(CompactResponse::BLOCKED_TEMP_ERROR);
             return;
         }
 
