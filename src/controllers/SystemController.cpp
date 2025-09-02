@@ -107,7 +107,7 @@ namespace SystemController {
 
     void printErrorStatus() {
         if (SafetyManager::isInErrorState()) {
-            char errorData[32];
+            char errorData[16];
             snprintf(errorData, sizeof(errorData), "%s %u",
                      SafetyManager::getErrorReason(),
                      SafetyManager::getErrorTimestamp());
