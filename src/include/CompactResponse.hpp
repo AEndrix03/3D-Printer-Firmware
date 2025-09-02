@@ -17,12 +17,7 @@ namespace CompactResponse {
         BLOCKED_MOTION_ERROR,
         BLOCKED_TEMP_ERROR,
         CANCELLED_ERROR,
-        NO_ERROR,
-        ALARM,
-        POWER_ACTIVE,
-        POWER_IDLE,
-        POWER_SLEEP,
-        POWER_DEEP_SLEEP
+        NO_ERROR
     };
 
     void send(ResponseCode code, uint32_t cmdNumber);
