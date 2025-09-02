@@ -168,7 +168,7 @@ namespace MotionController {
                          (pos.x / MotionConfig::STEPS_PER_MM_X),
                          (pos.y / MotionConfig::STEPS_PER_MM_Y),
                          (pos.z / MotionConfig::STEPS_PER_MM_Z));
-                CompactResponse::sendData("POS", posData);
+                CompactResponse::sendCriticalData("POS", posData);
                 break;
             }
             case 0:

@@ -194,7 +194,6 @@ namespace SafetyManager {
 
         if (StateMachine::getState() == MachineState::Error) {
             StateMachine::setState(MachineState::Idle);
-            CompactResponse::sendNoCommand(CompactResponse::CANCELLED_ERROR);
             return true;
         }
         return false;

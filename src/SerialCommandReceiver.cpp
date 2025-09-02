@@ -84,6 +84,12 @@ void SerialCommandReceiver::update() {
             if (bufferIndex == 0) continue;
             inputBuffer[bufferIndex] = '\0';
 
+            // Skip ACK
+            if (inputBuffer[0] == 'A' && isdigit(inputBuffer[1])) {
+                resetBuffer();
+                continue;
+            }
+
             ParsedCommand cmd{};
             cmd.number = extractNumber(inputBuffer);
             cmd.category = extractCategory(inputBuffer);

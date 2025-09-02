@@ -99,21 +99,21 @@ namespace SystemController {
 
     void clearError() {
         if (SafetyManager::clearError()) {
-            CompactResponse::send(CompactResponse::CANCELLED_ERROR, 0);
+            CompactResponse::sendNoCommand(CompactResponse::CANCELLED_ERROR);
         } else {
-            CompactResponse::send(CompactResponse::NO_ERROR, 0);
+            CompactResponse::sendNoCommand(CompactResponse::NO_ERROR);
         }
     }
 
     void printErrorStatus() {
         if (SafetyManager::isInErrorState()) {
             char errorData[32];
-            snprintf(errorData, sizeof(errorData), "%s %lu",
+            snprintf(errorData, sizeof(errorData), "%s %u",
                      SafetyManager::getErrorReason(),
                      SafetyManager::getErrorTimestamp());
-            CompactResponse::sendData("ERR", errorData);
+            CompactResponse::sendCriticalData("ERR", errorData);
         } else {
-            CompactResponse::sendData("ERR", "NONE");
+            CompactResponse::sendCriticalData("ERR", "NONE");
         }
     }
 

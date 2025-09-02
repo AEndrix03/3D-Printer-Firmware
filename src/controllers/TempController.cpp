@@ -105,20 +105,20 @@ namespace TempController {
                     setTargetTemperature(temp);
                     char tempData[16];
                     snprintf(tempData, sizeof(tempData), "SET_%.1f", temp);
-                    CompactResponse::sendData("TMP", tempData);
+                    CompactResponse::sendCriticalData("TMP", tempData);
                 }
                 break;
             }
             case 20: {
                 char tempData[16];
                 snprintf(tempData, sizeof(tempData), "%.1f %.1f", getTemperature(), targetTemp);
-                CompactResponse::sendData("TMP", tempData);
+                CompactResponse::sendCriticalData("TMP", tempData);
                 break;
             }
             case 25: {
                 char protData[8];
                 snprintf(protData, sizeof(protData), "%s", (tp.flags & 0x02) ? "ON" : "OFF");
-                CompactResponse::sendData("PRT", protData);
+                CompactResponse::sendCriticalData("PRT", protData);
                 break;
             }
             case 30: {
@@ -130,7 +130,7 @@ namespace TempController {
 
                     char protData[8];
                     snprintf(protData, sizeof(protData), "%s", enable ? "ON" : "OFF");
-                    CompactResponse::sendData("PRT", protData);
+                    CompactResponse::sendCriticalData("PRT", protData);
                 }
                 break;
             }

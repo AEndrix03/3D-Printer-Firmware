@@ -58,4 +58,36 @@ namespace CompactResponse {
         Serial.print(F(" *"));
         Serial.println(checksum);
     }
+
+    void sendCriticalData(const char* dataType, const char* payload, uint8_t maxRetries) {
+        char buffer[64];
+        snprintf(buffer, sizeof(buffer), "CRT %s %s", dataType, payload);
+
+        uint8_t attempts = 0;
+        while (attempts < maxRetries || maxRetries == 0) {
+            uint8_t checksum = computeChecksum(buffer);
+            Serial.print(buffer);
+            Serial.print(F(" *"));
+            Serial.println(checksum);
+
+            Serial.flush();
+            while (Serial.available()) Serial.read();
+
+            uint32_t start = millis();
+            while (millis() - start < 2000) { // 2s timeout
+                if (Serial.available() >= 4) {
+                    char ack[5];
+                    Serial.readBytes(ack, 4);
+                    ack[4] = '\0';
+
+                    if (ack[0] == 'A' && atoi(ack+1) == checksum) {
+                        return; // Success!
+                    }
+                    break; // Wrong ACK, retry
+                }
+            }
+            attempts++;
+        }
+        // Max retries reached - continue anyway
+    }
 }

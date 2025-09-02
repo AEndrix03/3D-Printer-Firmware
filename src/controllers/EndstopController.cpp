@@ -16,7 +16,7 @@ namespace EndstopController {
             char endstopData[16];
             snprintf(endstopData, sizeof(endstopData), "%d %d %d",
                      isTriggeredX(), isTriggeredY(), isTriggeredZ());
-            CompactResponse::sendData("END", endstopData);
+            CompactResponse::sendCriticalData("END", endstopData);
         }
     }
 

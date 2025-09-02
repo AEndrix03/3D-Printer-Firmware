@@ -31,4 +31,6 @@ namespace CompactResponse {
 
     void sendData(const char *dataType, const char *payload);
 
+    void sendCriticalData(const char *dataType, const char *payload, uint8_t maxRetries = 3);
+
 }
