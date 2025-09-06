@@ -3,7 +3,7 @@
 //
 
 #include "include/BusyHandler.hpp"
-
+#include "./include/hal/McuHAL.hpp"
 #include "./include/TimeUtils.hpp"
 
 namespace {
@@ -15,7 +15,7 @@ namespace {
 namespace BusyHandler {
     void start() {
         active = true;
-        lastBusyTime = millis();
+        lastBusyTime = hal::halMillis();
     }
 
     void stop() {
@@ -24,8 +24,8 @@ namespace BusyHandler {
 
     void update() {
         if (active && TimeUtils::hasElapsed(lastBusyTime, BUSY_INTERVAL)) {
-            Serial.println(F("BUSY"));
-            lastBusyTime = millis();
+            hal::serial->println(F("BUSY"));
+            lastBusyTime = hal::halMillis();
         }
     }
 }

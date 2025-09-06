@@ -4,7 +4,7 @@ setlocal enabledelayedexpansion
 rem === Configurazione ===
 set "ARDUINO_CLI=arduino-cli"
 set "BOARD=arduino:avr:uno"
-set "PORT=COM5"
+set "PORT=COM3"
 set "PROJECT_DIR=%~dp0"
 set "PROJECT_DIR=%PROJECT_DIR:~0,-1%"
 
@@ -52,5 +52,7 @@ if %errorlevel% neq 0 (
 
 echo [SUCCESSO] Upload completato!
 echo [INFO] Puoi riavviare il driver ora.
+
+pause
 
 endlocal

@@ -21,10 +21,14 @@
 namespace {
     bool systemReady = false;
     unsigned long lastReadyMessage = 0;
-    const unsigned long READY_MESSAGE_INTERVAL = 5000;
+    unsigned long bootTime = 0;
+    constexpr unsigned long READY_MESSAGE_INTERVAL = 5000;
+    constexpr unsigned long BOOT_GRACE_PERIOD = 10000; // 10 secondi di grazia all'avvio
 }
 
 void Application::init() {
+    bootTime = hal::halMillis();
+
     // Initialize HAL first
     hal::init();
 
@@ -58,22 +62,39 @@ void Application::init() {
     MCUSR &= ~(1 << WDRF);
 #endif
     hal::watchdog::disable();
+    hal::watchdog::enable(2000); // Re-enable con timeout di 2 secondi
 
     hal::serial->println(F("Sistema pronto."));
     lastReadyMessage = hal::halMillis();
 }
 
 void Application::loop() {
+    // Reset watchdog all'inizio di ogni loop
     WatchdogHandler::reset();
 
-    if (!systemReady && TimeUtils::hasElapsed(lastReadyMessage, READY_MESSAGE_INTERVAL)) {
+    // Calcola tempo dalla boot
+    unsigned long uptime = hal::halMillis() - bootTime;
+
+    // Stampa "Sistema pronto" solo se:
+    // 1. Non è ancora pronto AND
+    // 2. È passato il grace period di boot AND
+    // 3. È passato l'intervallo dai messaggi precedenti
+    if (!systemReady &&
+        uptime > BOOT_GRACE_PERIOD &&
+        TimeUtils::hasElapsed(lastReadyMessage, READY_MESSAGE_INTERVAL)) {
         hal::serial->println(F("Sistema pronto."));
         lastReadyMessage = hal::halMillis();
     }
 
+    // Update core systems con watchdog reset intercalati
     SerialCommandReceiver::update();
+    WatchdogHandler::reset();
+
     SafetyManager::update();
+    WatchdogHandler::reset();
+
     BusyHandler::update();
+    WatchdogHandler::reset();
 }
 
 void Application::notifyCommandReceived() {

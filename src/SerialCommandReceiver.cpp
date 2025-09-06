@@ -6,6 +6,7 @@
 #include "./include/BusyHandler.hpp"
 #include "./include/Application.hpp"
 #include "./include/CompactResponse.hpp"
+#include "./include/hal/McuHAL.hpp"
 
 uint32_t SerialCommandReceiver::lastCommandNumber = 0;
 
@@ -13,6 +14,12 @@ namespace {
     char inputBuffer[48];
     uint8_t bufferIndex = 0;
     bool firstCommandReceived = false;
+
+    // Contatori per gestire errori ripetuti
+    uint8_t consecutiveErrors = 0;
+    uint32_t lastErrorTime = 0;
+    constexpr uint8_t MAX_CONSECUTIVE_ERRORS = 10;
+    constexpr uint32_t ERROR_RESET_INTERVAL = 5000; // 5 secondi
 
     uint8_t computeChecksum(const char *str) {
         uint8_t cs = 0;
@@ -74,17 +81,41 @@ namespace {
         inputBuffer[bufferIndex++] = c;
         return true;
     }
+
+    void handleError() {
+        consecutiveErrors++;
+        lastErrorTime = hal::halMillis();
+
+        // Se ci sono troppi errori consecutivi, forza il flag systemReady
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+            if (!firstCommandReceived) {
+                firstCommandReceived = true;
+                Application::notifyCommandReceived();
+            }
+            consecutiveErrors = 0; // Reset contatore
+        }
+    }
+
+    void resetErrorCounter() {
+        // Reset del contatore errori se è passato abbastanza tempo
+        if (consecutiveErrors > 0 &&
+            hal::halMillis() - lastErrorTime > ERROR_RESET_INTERVAL) {
+            consecutiveErrors = 0;
+        }
+    }
 }
 
 void SerialCommandReceiver::update() {
-    while (Serial.available()) {
-        char c = Serial.read();
+    resetErrorCounter();
+
+    while (hal::serial->available()) {
+        char c = hal::serial->read();
 
         if (c == '\n' || c == '\r') {
             if (bufferIndex == 0) continue;
             inputBuffer[bufferIndex] = '\0';
 
-            // Skip ACK
+            // Skip ACK messages
             if (inputBuffer[0] == 'A' && isdigit(inputBuffer[1])) {
                 resetBuffer();
                 continue;
@@ -99,6 +130,9 @@ void SerialCommandReceiver::update() {
             cmd.valid = (cmd.checksum == extractProvidedChecksum(inputBuffer));
 
             if (cmd.valid) {
+                // Reset contatore errori su comando valido
+                consecutiveErrors = 0;
+
                 if (!firstCommandReceived) {
                     firstCommandReceived = true;
                     Application::notifyCommandReceived();
@@ -118,12 +152,14 @@ void SerialCommandReceiver::update() {
                     CompactResponse::send(CompactResponse::OK, cmd.number);
                 }
             } else {
+                handleError();
                 CompactResponse::send(CompactResponse::CHECKSUM_ERROR, cmd.number);
             }
 
             resetBuffer();
         } else if (!addCharToBuffer(c)) {
-            // Buffer overflow handled
+            handleError();
+            // Buffer overflow handled in addCharToBuffer
         }
     }
 }
