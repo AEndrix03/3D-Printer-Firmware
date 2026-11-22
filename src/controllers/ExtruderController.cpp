@@ -10,19 +10,18 @@
 #include "../include/CompactResponse.hpp"
 
 namespace {
+    // Usato solo per configurare pin ed enable: gli step li genera lo Stepper
     A4988Stepper stepperE(PIN_E_STEP, PIN_E_DIR);
-    int32_t positionSteps = 0;
     float stepsPerMm = ExtruderConfig::STEPS_PER_MM_E;
-    bool lastDirection = true;
 
-    /** Estrusione relativa in mm, con controllo di estrusione a freddo. */
-    void extrude(float mm, float feedrate) {
+    /** Estrusione relativa in mm (accodata), con controllo di estrusione a freddo. */
+    void extrude(float mm, float feedrate, uint32_t commandNumber) {
         if (mm == 0.0f) return;
         if (!ExtruderController::canExtrude()) {
             CompactResponse::reject(PSTR("COLD_EXT"));
             return;
         }
-        MotionController::moveExtruder(lround(mm * stepsPerMm), feedrate);
+        MotionController::queueExtruder(lround(mm * stepsPerMm), feedrate, commandNumber);
     }
 }
 
@@ -30,16 +29,6 @@ namespace ExtruderController {
     void init() {
         stepperE.init(StepperConfig::STEPPER_INVERT_E);
         stepperE.enable(StepperConfig::STEPPER_ENABLE_E);
-        stepperE.setDirection(lastDirection);
-    }
-
-    void stepRaw(bool forward) {
-        if (forward != lastDirection) {
-            stepperE.setDirection(forward);
-            lastDirection = forward;
-        }
-        stepperE.step();
-        positionSteps += forward ? 1 : -1;
     }
 
     float getStepsPerMm() {
@@ -50,7 +39,7 @@ namespace ExtruderController {
         return TempController::canExtrude();
     }
 
-    void handle(uint8_t code, const char *params) {
+    void handle(uint8_t code, const char *params, uint32_t commandNumber) {
         float mm = 0.0f;
         float feedrate = 1000.0f;
 
@@ -58,20 +47,20 @@ namespace ExtruderController {
             case 10:
                 ParamParser::get(params, 'E', mm);
                 ParamParser::get(params, 'F', feedrate);
-                extrude(mm, feedrate);
+                extrude(mm, feedrate, commandNumber);
                 break;
             case 11:
                 mm = 2.0f;
                 feedrate = 1800.0f;
                 ParamParser::get(params, 'E', mm);
                 ParamParser::get(params, 'F', feedrate);
-                extrude(-fabs(mm), feedrate);
+                extrude(-fabs(mm), feedrate, commandNumber);
                 break;
             case 12:
                 mm = 5.0f;
                 ParamParser::get(params, 'E', mm);
                 ParamParser::get(params, 'F', feedrate);
-                extrude(fabs(mm), feedrate);
+                extrude(fabs(mm), feedrate, commandNumber);
                 break;
             case 13: {
                 float steps = 100.0f;
@@ -82,12 +71,12 @@ namespace ExtruderController {
                     CompactResponse::reject(PSTR("COLD_EXT"));
                     break;
                 }
-                MotionController::moveExtruder(dir != 0.0f ? (int32_t) steps : -(int32_t) steps,
-                                               ExtruderConfig::MANUAL_STEP_FEEDRATE);
+                MotionController::queueExtruder(dir != 0.0f ? (int32_t) steps : -(int32_t) steps,
+                                                ExtruderConfig::MANUAL_STEP_FEEDRATE, commandNumber);
                 break;
             }
             case 14:
-                positionSteps = 0;
+                if (MotionController::synchronize()) MotionController::resetExtruderSteps();
                 break;
             case 15: {
                 float value = 0.0f;
@@ -95,6 +84,7 @@ namespace ExtruderController {
                     CompactResponse::reject(PSTR("BAD_SPM"));
                     break;
                 }
+                if (!MotionController::synchronize()) break; // i blocchi in coda usano il valore attuale
                 stepsPerMm = value;
                 CompactResponse::begin(PSTR("SPM"));
                 CompactResponse::addFloat(stepsPerMm, 2);
@@ -103,7 +93,7 @@ namespace ExtruderController {
             }
             case 16:
                 CompactResponse::begin(PSTR("EPO"));
-                CompactResponse::addFloat((float) positionSteps / stepsPerMm, 3);
+                CompactResponse::addFloat((float) MotionController::extruderSteps() / stepsPerMm, 3);
                 CompactResponse::end();
                 break;
             case 0:

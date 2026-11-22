@@ -35,6 +35,14 @@ namespace CompactResponse {
     /** Invia una risposta terminale "<codice> N<numero>". */
     void send(ResponseCode code, uint32_t cmdNumber);
 
+    /**
+     * @brief Invia "OK0 N<numero> D<completato>".
+     * I movimenti rispondono OK quando sono in coda, non quando sono finiti:
+     * `completed` dice all'host fino a quale comando l'esecuzione e' davvero terminata
+     * (serve per riprendere una stampa dal punto giusto).
+     */
+    void sendOk(uint32_t cmdNumber, uint32_t completed);
+
     /** Imposta l'esito terminale del comando in esecuzione (default OK). */
     void setResult(ResponseCode code);
 

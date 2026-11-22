@@ -81,6 +81,24 @@ namespace hal {
 
     extern Serial *serial;
 
+    // ===== Interrupt =====
+    /// Disabilita gli interrupt e restituisce lo stato precedente (sezioni critiche annidabili).
+    uint8_t irqSave();
+
+    void irqRestore(uint8_t state);
+
+    // ===== Timer degli step =====
+    namespace stepTimer {
+        /// Risoluzione del timer: 2 MHz = 0,5 us per tick (Timer1 con prescaler 8 su AVR a 16 MHz)
+        constexpr uint32_t TICKS_PER_SECOND = 2000000UL;
+
+        /// Avvia il timer: `handler` viene chiamato in interrupt a ogni scadenza.
+        void start(void (*handler)());
+
+        /// Tick fino alla prossima scadenza. Chiamabile dall'handler.
+        void setInterval(uint16_t ticks);
+    }
+
     // ===== Watchdog =====
     namespace watchdog {
         void enable(uint16_t timeout_ms);

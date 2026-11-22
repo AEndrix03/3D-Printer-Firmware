@@ -48,7 +48,44 @@ ISR(WDT_vect) {
     for (;;) {}
 }
 
+namespace {
+    void (*stepHandler)() = nullptr;
+}
+
+ISR(TIMER1_COMPA_vect) {
+    if (stepHandler) stepHandler();
+}
+
 namespace hal {
+
+    uint8_t irqSave() {
+        const uint8_t state = SREG;
+        cli();
+        return state;
+    }
+
+    void irqRestore(uint8_t state) { SREG = state; }
+
+    namespace stepTimer {
+        void start(void (*handler)()) {
+            const uint8_t state = irqSave();
+            stepHandler = handler;
+            TCCR1A = 0;
+            TCCR1B = _BV(WGM12) | _BV(CS11); // CTC, prescaler 8 -> 2 MHz
+            TCNT1 = 0;
+            OCR1A = 2000;
+            TIMSK1 |= _BV(OCIE1A);
+            irqRestore(state);
+        }
+
+        void setInterval(uint16_t ticks) {
+            // In CTC il contatore riparte da zero a ogni scadenza: se la routine ha gia'
+            // superato il nuovo valore, la scadenza andrebbe persa per un giro intero (32 ms).
+            const uint16_t now = TCNT1;
+            if (ticks < now + 16) ticks = now + 16;
+            OCR1A = ticks;
+        }
+    }
 
     class ArduinoSerial : public hal::Serial {
     public:

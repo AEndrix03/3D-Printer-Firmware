@@ -18,6 +18,7 @@
 #include <condition_variable>
 #include <deque>
 #include <mutex>
+#include <string>
 #include <thread>
 
 namespace {
@@ -69,6 +70,9 @@ namespace {
     long rawSteps[4] = {0, 0, 0, 0};
     bool recording = false;
     std::vector<std::pair<long, long>> recorded;
+    bool recordingIntervals = false;
+    bool steppedSinceInterval = false;
+    std::vector<uint16_t> recordedIntervals;
 
     const uint8_t STEP_PINS[4] = {PIN_X_STEP, PIN_Y_STEP, PIN_Z_STEP, PIN_E_STEP};
     const uint8_t DIR_PINS[4] = {PIN_X_DIR, PIN_Y_DIR, PIN_Z_DIR, PIN_E_DIR};
@@ -87,6 +91,13 @@ namespace {
     std::atomic<int> bites{0};
     hal::ResetCause resetCause = hal::RESET_POWERON;
 
+    // ---- interrupt simulati: un mutex ricorsivo fa da "interrupt disabilitati" ----
+    std::recursive_mutex irqMutex;
+    std::thread timerThread;
+    std::atomic<void (*)()> timerHandler{nullptr};
+    std::atomic<uint32_t> timerIntervalTicks{2000};
+    std::atomic<uint64_t> worstIsrGapMicros{0};
+
     std::atomic<uint64_t> watchdogTimeoutMicros{0};
     std::atomic<uint64_t> lastFeedMicros{0};
 
@@ -97,6 +108,41 @@ namespace {
             lastFeedMicros = watchdogClock(); // un firmware congelato non e' un watchdog scattato
         }
         if (pendingReboot >= 0 || !running) throw RebootSignal{};
+    }
+
+    /// Emula il Timer1: chiama l'handler degli step agli istanti programmati.
+    void timerMain() {
+        uint64_t next = simMicros();
+        while (running) {
+            void (*handler)() = timerHandler.load();
+            if (!handler || frozen) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                next = simMicros();
+                continue;
+            }
+
+            const uint64_t now = simMicros();
+            if (now < next) {
+                double scale;
+                {
+                    std::lock_guard<std::mutex> lock(timeMutex);
+                    scale = timeScale;
+                }
+                if ((double) (next - now) / scale > 400.0) {
+                    std::this_thread::sleep_for(std::chrono::microseconds(100));
+                } else {
+                    std::this_thread::yield();
+                }
+                continue;
+            }
+            if (now - next > 200000) next = now; // salto d'orologio: niente raffica di step
+
+            {
+                std::lock_guard<std::recursive_mutex> lock(irqMutex);
+                handler();
+            }
+            next += timerIntervalTicks.load() / 2; // 2 tick = 1 us
+        }
     }
 
     void firmwareMain() {
@@ -213,6 +259,7 @@ void digitalWrite(uint8_t pin, uint8_t value) {
     for (int axis = 0; axis < 4; ++axis) {
         if (pin != STEP_PINS[axis]) continue;
         rawSteps[axis] += pins[DIR_PINS[axis]] ? 1 : -1;
+        steppedSinceInterval = true;
         if (recording && axis < 2) recorded.emplace_back(logicalSteps(0), logicalSteps(1));
     }
 }
@@ -292,6 +339,24 @@ namespace hal {
 
     void init() {}
 
+    uint8_t irqSave() {
+        irqMutex.lock();
+        return 0;
+    }
+
+    void irqRestore(uint8_t) { irqMutex.unlock(); }
+
+    namespace stepTimer {
+        void start(void (*handler)()) { timerHandler = handler; }
+
+        void setInterval(uint16_t ticks) {
+            timerIntervalTicks = ticks;
+            std::lock_guard<std::mutex> lock(pinMutex);
+            if (steppedSinceInterval && recordingIntervals) recordedIntervals.push_back(ticks);
+            steppedSinceInterval = false;
+        }
+    }
+
     void reset() {
         pendingReboot = RESET_SOFT;
         throw RebootSignal{};
@@ -313,12 +378,14 @@ namespace sim {
     void start() {
         if (running.exchange(true)) return;
         firmwareThread = std::thread(firmwareMain);
+        timerThread = std::thread(timerMain);
     }
 
     void stop() {
         if (!running.exchange(false)) return;
         frozen = false;
         if (firmwareThread.joinable()) firmwareThread.join();
+        if (timerThread.joinable()) timerThread.join();
     }
 
     void hostWrite(const std::string &bytes) {
@@ -408,6 +475,17 @@ namespace sim {
         return recorded;
     }
 
+    void recordIntervals(bool enabled) {
+        std::lock_guard<std::mutex> lock(pinMutex);
+        recordingIntervals = enabled;
+        if (enabled) recordedIntervals.clear();
+    }
+
+    std::vector<uint16_t> intervals() {
+        std::lock_guard<std::mutex> lock(pinMutex);
+        return recordedIntervals;
+    }
+
     bool pinLevel(uint8_t pin) {
         std::lock_guard<std::mutex> lock(pinMutex);
         return pins[pin];
@@ -424,7 +502,11 @@ namespace sim {
         return (int) std::lround(1023.0 * r / (r + THERMISTOR_PULLUP));
     }
 
-    void freeze(bool value) { frozen = value; }
+    void freeze(bool value) {
+        frozen = value;
+        // il firmware si ferma al prossimo punto di controllo: gli si lascia il tempo di arrivarci
+        if (value) std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    }
 
     void reboot(uint8_t cause) { pendingReboot = cause; }
 

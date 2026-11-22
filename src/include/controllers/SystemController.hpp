@@ -46,7 +46,7 @@ namespace SystemController {
     /**
      * @brief Avvia il processo di Homing della macchina, solo se in Idle
      */
-    void homing();
+    void homing(uint8_t axes = 0);
 
     void clearError();
 

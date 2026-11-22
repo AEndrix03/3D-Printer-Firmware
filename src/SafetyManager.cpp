@@ -57,7 +57,7 @@ namespace SafetyManager {
     void updatePowerManagement() {
         const MachineState state = StateMachine::getState();
         if (state == MachineState::Printing || state == MachineState::Homing ||
-            state == MachineState::Error) {
+            state == MachineState::Error || !MotionController::isIdle()) {
             return;
         }
 
@@ -140,7 +140,7 @@ namespace SafetyManager {
         errorReason[sizeof(errorReason) - 1] = '\0';
 
         StateMachine::setState(MachineState::Error);
-        MotionController::setEnabled(false);
+        MotionController::emergencyStop(); // ferma subito gli step e svuota la coda
         // La ventola resta com'e': spegnerla durante un allarme termico peggiorerebbe le cose.
 
         CompactResponse::sendData(PSTR("ALM"), reason);

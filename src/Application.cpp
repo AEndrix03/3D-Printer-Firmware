@@ -79,6 +79,7 @@ void Application::loop() {
     WatchdogHandler::reset();
 
     SafetyManager::update();
+    MotionController::update();
     WatchdogHandler::reset();
 
     BusyHandler::update();

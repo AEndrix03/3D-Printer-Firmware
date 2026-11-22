@@ -17,10 +17,7 @@
 namespace ExtruderController {
     void init();
 
-    void handle(uint8_t code, const char *params);
-
-    /** Esegue un singolo step (usato dal movimento coordinato). */
-    void stepRaw(bool forward);
+    void handle(uint8_t code, const char *params, uint32_t commandNumber);
 
     float getStepsPerMm();
 

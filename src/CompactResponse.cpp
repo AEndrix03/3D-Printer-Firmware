@@ -85,6 +85,18 @@ namespace CompactResponse {
         transmit(checksum());
     }
 
+    void sendOk(uint32_t cmdNumber, uint32_t completed) {
+        char num[11];
+        txLen = 0;
+        putStr_P(PSTR("OK0 N"));
+        ultoa(cmdNumber, num, 10);
+        putStr(num);
+        putStr_P(PSTR(" D"));
+        ultoa(completed, num, 10);
+        putStr(num);
+        transmit(checksum());
+    }
+
     void setResult(ResponseCode code) {
         pendingResult = code;
     }

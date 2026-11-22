@@ -115,6 +115,35 @@ namespace hal {
 
     void reset() { esp_restart(); }
 
+    static portMUX_TYPE halMux = portMUX_INITIALIZER_UNLOCKED;
+    static hw_timer_t *stepHwTimer = nullptr;
+    static void (*stepHandler)() = nullptr;
+
+    static void IRAM_ATTR onStepTimer() {
+        if (stepHandler) stepHandler();
+    }
+
+    uint8_t irqSave() {
+        portENTER_CRITICAL(&halMux);
+        return 0;
+    }
+
+    void irqRestore(uint8_t) { portEXIT_CRITICAL(&halMux); }
+
+    namespace stepTimer {
+        void start(void (*handler)()) {
+            stepHandler = handler;
+            stepHwTimer = timerBegin(0, 40, true); // 80 MHz / 40 = 2 MHz
+            timerAttachInterrupt(stepHwTimer, &onStepTimer, true);
+            timerAlarmWrite(stepHwTimer, 2000, true);
+            timerAlarmEnable(stepHwTimer);
+        }
+
+        void setInterval(uint16_t ticks) {
+            if (stepHwTimer) timerAlarmWrite(stepHwTimer, ticks, true);
+        }
+    }
+
     ResetCause getResetCause() {
         switch (esp_reset_reason()) {
             case ESP_RST_POWERON: return RESET_POWERON;

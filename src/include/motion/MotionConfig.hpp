@@ -11,20 +11,20 @@ namespace MotionConfig {
     constexpr float MAX_FEEDRATE_Y = 5000.0f;
     constexpr float MAX_FEEDRATE_Z = 150.0f;
 
-    constexpr float MIN_FEEDRATE_X = 100.0f;
-    constexpr float MIN_FEEDRATE_Y = 100.0f;
-    constexpr float MIN_FEEDRATE_Z = 50.0f;
+    constexpr float MIN_FEEDRATE = 30.0f;     // mm/min lungo il percorso
 
-    // Intervallo minimo tra due step dell'asse dominante (limite del loop su AVR)
-    constexpr uint16_t MIN_STEP_INTERVAL_US = 200;
+    // Accelerazioni massime per asse (mm/s^2). Un movimento che coinvolge piu' assi
+    // usa la piu' alta accelerazione che non supera il limite di nessuno.
+    constexpr float ACCELERATION_XY = 1000.0f;
+    constexpr float ACCELERATION_Z = 100.0f;
+    constexpr float ACCELERATION_E = 1500.0f;
 
-    // Rampa di accelerazione, riferita all'asse dominante del movimento:
-    // velocita' di partenza/arrivo (step/s) e accelerazione (step/s^2).
-    // X/Y: 10 mm/s, 1000 mm/s^2 - Z: 1 mm/s, 50 mm/s^2 - E: 5 mm/s, 1000 mm/s^2
-    constexpr uint16_t START_RATE_XY = 800;
-    constexpr uint32_t ACCEL_XY = 80000UL;
-    constexpr uint16_t START_RATE_Z = 400;
-    constexpr uint32_t ACCEL_Z = 20000UL;
-    constexpr uint16_t START_RATE_E = 400;
-    constexpr uint32_t ACCEL_E = 80000UL;
+    // Quanto il percorso puo' "tagliare" uno spigolo (mm): determina la velocita'
+    // in curva. Piu' basso = spigoli piu' fedeli ma piu' lenti. 0.02 e' un valore tipico.
+    constexpr float JUNCTION_DEVIATION = 0.02f;
+
+    // Limiti del generatore di step. 8 kHz = 100 mm/s a 80 step/mm (oltre i 5000 mm/min di MAX_FEEDRATE): l'interrupt
+    // impiega ~60-70 us nel caso peggiore (in rampa) su ATmega328P a 16 MHz.
+    constexpr uint16_t MAX_STEP_RATE = 8000;
+    constexpr uint16_t MIN_STEP_RATE = 40;
 }

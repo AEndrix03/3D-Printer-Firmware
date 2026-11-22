@@ -58,9 +58,15 @@ namespace SystemController {
 
     void handle(uint8_t code, const char *params) {
         switch (code) {
-            case 0:
-                homing();
+            case 0: {
+                // S0 [X] [Y] [Z]: assi da azzerare (nessuno = tutti)
+                uint8_t axes = 0;
+                if (strchr(params, 'X')) axes |= 0x01;
+                if (strchr(params, 'Y')) axes |= 0x02;
+                if (strchr(params, 'Z')) axes |= 0x04;
+                homing(axes);
                 break;
+            }
             case 1:
                 startPrint();
                 break;
@@ -147,6 +153,8 @@ namespace SystemController {
 
     void pause() {
         if (StateMachine::getState() == MachineState::Printing) {
+            // i movimenti gia' accodati vengono completati: all'OK la macchina e' ferma
+            if (!MotionController::synchronize()) return;
             StateMachine::setState(MachineState::Paused);
             CompactResponse::sendData(PSTR("STA"), PSTR("PAUSED"));
         } else {
@@ -164,6 +172,7 @@ namespace SystemController {
     }
 
     void endPrint() {
+        if (!MotionController::synchronize()) return;
         const MachineState state = StateMachine::getState();
         if (state == MachineState::Printing || state == MachineState::Paused) {
             StateMachine::setState(MachineState::Idle);
@@ -193,14 +202,14 @@ namespace SystemController {
         CompactResponse::end();
     }
 
-    void homing() {
+    void homing(uint8_t axes) {
         if (StateMachine::getState() != MachineState::Idle) {
             CompactResponse::reject(PSTR("NOT_IDLE"));
             return;
         }
 
         StateMachine::setState(MachineState::Homing);
-        const bool ok = MotionController::homeAllAxes();
+        const bool ok = MotionController::home(axes);
 
         // Una emergenza durante la ricerca dello zero lascia la macchina in Error
         if (StateMachine::getState() == MachineState::Homing) {

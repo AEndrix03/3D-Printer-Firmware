@@ -11,10 +11,10 @@
 void CommandDispatcher::dispatch(const ParsedCommand &cmd) {
     switch (cmd.category) {
         case 'M':
-            MotionController::handle(cmd.code, cmd.params);
+            MotionController::handle(cmd.code, cmd.params, cmd.number);
             break;
         case 'A':
-            ExtruderController::handle(cmd.code, cmd.params);
+            ExtruderController::handle(cmd.code, cmd.params, cmd.number);
             break;
         case 'T':
             TempController::handle(cmd.code, cmd.params);

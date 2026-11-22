@@ -54,6 +54,12 @@ namespace sim {
 
     std::vector<std::pair<long, long>> path();
 
+    /// Registra l'intervallo (tick da 0,5 us) programmato dopo ogni step: e' il profilo
+    /// di velocita' deciso dal firmware, senza il rumore temporale del PC.
+    void recordIntervals(bool enabled);
+
+    std::vector<uint16_t> intervals();
+
     bool pinLevel(uint8_t pin);
 
     void setAnalog(uint8_t pin, int value);

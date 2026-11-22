@@ -4,6 +4,7 @@
 #include "./include/CommandDispatcher.hpp"
 #include "./include/SafetyManager.hpp"
 #include "./include/BusyHandler.hpp"
+#include "./include/controllers/MotionController.hpp"
 #include "./include/Application.hpp"
 #include "./include/CompactResponse.hpp"
 #include "./include/hal/McuHAL.hpp"
@@ -28,9 +29,6 @@ namespace {
 
         // ACK fuori tempo ("A123"): non e' un comando
         if (inputBuffer[0] == 'A' && isdigit(inputBuffer[1])) return;
-
-        // Abort ricevuto a macchina ferma: niente da interrompere
-        if (inputBuffer[0] == '!') return;
 
         // --- checksum: obbligatorio, calcolato su tutto cio' che precede " *" ---
         char *star = strrchr(inputBuffer, '*');
@@ -84,13 +82,25 @@ namespace {
         CommandDispatcher::dispatch(cmd);
         BusyHandler::stop();
         SafetyManager::notifyCommandReceived(); // l'inattivita' si misura dalla fine del comando
-        CompactResponse::send(CompactResponse::takeResult(), cmd.number);
+
+        const CompactResponse::ResponseCode result = CompactResponse::takeResult();
+        if (result == CompactResponse::OK) {
+            CompactResponse::sendOk(cmd.number, MotionController::lastCompletedCommand(cmd.number));
+        } else {
+            CompactResponse::send(result, cmd.number);
+        }
     }
 }
 
 void SerialCommandReceiver::update() {
     while (hal::serial->available()) {
         const char c = (char) hal::serial->read();
+
+        if (c == '!') {
+            // Carattere in tempo reale: arresto controllato del movimento, a qualunque punto della riga
+            MotionController::abort();
+            continue;
+        }
 
         if (c == '\n' || c == '\r') {
             if (lineOverflow) {

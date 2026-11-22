@@ -7,9 +7,9 @@
 #include "../include/SafetyManager.hpp"
 #include "../include/motion/MotionConfig.hpp"
 #include "../include/motion/HomingConfig.hpp"
-#include "../include/motion/MotionPlanner.hpp"
+#include "../include/motion/Planner.hpp"
+#include "../include/motion/Stepper.hpp"
 #include "../include/endstop/EndstopConfig.hpp"
-#include "../include/extruder/ExtruderConfig.hpp"
 #include "../include/hal/drivers/StepperConfig.hpp"
 #include "../include/hal/drivers/stepper/A4988Stepper.hpp"
 #include "../include/BusyHandler.hpp"
@@ -18,314 +18,93 @@
 #include "../include/CompactResponse.hpp"
 
 namespace {
-    enum : uint8_t { AX_X = 0, AX_Y, AX_Z, AX_E, AX_COUNT };
+    using Planner::AX_X;
+    using Planner::AX_Y;
+    using Planner::AX_Z;
+    using Planner::AX_E;
+    using Planner::AX_COUNT;
 
-    enum MoveResult : uint8_t { MOVE_DONE, MOVE_ABORTED, MOVE_ENDSTOP, MOVE_ERROR };
-
+    // Usati solo per configurare i pin e l'enable: gli step li genera lo Stepper in interrupt
     A4988Stepper stepperX(PIN_X_STEP, PIN_X_DIR);
     A4988Stepper stepperY(PIN_Y_STEP, PIN_Y_DIR);
     A4988Stepper stepperZ(PIN_Z_STEP, PIN_Z_DIR);
 
-    position::Position currentPosition;
-    float eRemainder = 0.0f;     // frazione di step E non ancora eseguita (evita deriva di estrusione)
+    float eRemainder = 0.0f;      // frazione di step E non ancora eseguita (evita deriva di estrusione)
     float lastFeedrate = 1000.0f; // F e' modale
     bool abortRequested = false;
+    bool referenced = false;
+
+    const float STEPS_PER_MM[3] = {MotionConfig::STEPS_PER_MM_X, MotionConfig::STEPS_PER_MM_Y,
+                                   MotionConfig::STEPS_PER_MM_Z};
+
+    /** Dopo un arresto la coda e' stata svuotata: il planner riparte dalla posizione reale. */
+    void resyncAfterStop() {
+        if (!Stepper::consumeStopEvent()) return;
+        for (uint8_t a = 0; a < AX_COUNT; ++a) Planner::setPosition(a, Stepper::position(a));
+        eRemainder = 0.0f;
+    }
 
     /**
-     * Lavori periodici durante un movimento bloccante: watchdog, BUSY, protezioni
-     * e abort dall'host. Il protocollo e' stop-and-wait, quindi durante un
-     * movimento l'unico byte valido in arrivo e' '!'.
-     * @return false se il movimento deve fermarsi
+     * Lavori periodici mentre un comando attende (posto in coda o fine dei movimenti):
+     * watchdog, BUSY, protezioni e abort dall'host. Il protocollo e' stop-and-wait,
+     * quindi durante l'attesa l'unico byte valido in arrivo e' '!'.
+     * @return false se l'attesa va interrotta
      */
-    bool housekeeping() {
+    bool waitTask() {
         hal::watchdog::reset();
         BusyHandler::update();
         SafetyManager::update();
         while (hal::serial->available()) {
-            if (hal::serial->read() == '!') abortRequested = true;
+            if (hal::serial->read() == '!') MotionController::abort();
         }
         return !abortRequested && StateMachine::getState() != MachineState::Error;
     }
 
-    /** Attende l'istante `next` (micros). Se si e' in ritardo non recupera con una raffica di step. */
-    inline void waitUntil(uint32_t &next, uint32_t interval) {
-        if ((int32_t) (hal::halMicros() - next) > (int32_t) interval) {
-            next = hal::halMicros();
-            return;
-        }
-        while ((int32_t) (hal::halMicros() - next) < 0) {}
-    }
-
-    inline void stepAxis(uint8_t axis, bool positive) {
-        switch (axis) {
-            case AX_X:
-                stepperX.step();
-                currentPosition.x += positive ? 1 : -1;
-                break;
-            case AX_Y:
-                stepperY.step();
-                currentPosition.y += positive ? 1 : -1;
-                break;
-            case AX_Z:
-                stepperZ.step();
-                currentPosition.z += positive ? 1 : -1;
-                break;
-            default:
-                ExtruderController::stepRaw(positive);
-                break;
+    /** Risposta al comando quando un'attesa viene interrotta. */
+    void reportInterrupted() {
+        if (StateMachine::getState() == MachineState::Error) {
+            CompactResponse::setResult(CompactResponse::BLOCKED_MOTION_ERROR);
+        } else {
+            CompactResponse::reject(PSTR("ABORTED"));
         }
     }
 
-    /**
-     * Segmento rettilineo coordinato su 4 assi.
-     * @param delta step con segno per X, Y, Z, E
-     * @param feedrate velocita' lungo il percorso XYZ in mm/min (per E se il movimento e' di sola estrusione)
-     */
-    MoveResult runLine(const int32_t *delta, float feedrate) {
-        uint32_t steps[AX_COUNT];
-        uint32_t maxSteps = 0;
-        uint8_t dominant = AX_X;
-
-        for (uint8_t a = 0; a < AX_COUNT; ++a) {
-            steps[a] = (uint32_t) labs(delta[a]);
-            if (steps[a] > maxSteps) {
-                maxSteps = steps[a];
-                dominant = a;
-            }
+    /** Un arresto in corso deve concludersi prima di accettare altro. */
+    void settle() {
+        while (!Stepper::isIdle() && abortRequested) {
+            hal::watchdog::reset();
+            SafetyManager::update();
         }
-        if (maxSteps == 0) return MOVE_DONE;
-
-        // --- velocita': F vale lungo il percorso, limitata dal massimo di ogni asse ---
-        const float stepsPerMm[AX_COUNT] = {
-                MotionConfig::STEPS_PER_MM_X, MotionConfig::STEPS_PER_MM_Y,
-                MotionConfig::STEPS_PER_MM_Z, ExtruderController::getStepsPerMm()
-        };
-        const float maxFeed[AX_COUNT] = {
-                MotionConfig::MAX_FEEDRATE_X, MotionConfig::MAX_FEEDRATE_Y,
-                MotionConfig::MAX_FEEDRATE_Z, ExtruderConfig::MAX_FEEDRATE_E
-        };
-
-        float mm[AX_COUNT];
-        float length = 0.0f;
-        for (uint8_t a = 0; a < AX_COUNT; ++a) {
-            mm[a] = (float) steps[a] / stepsPerMm[a];
-            if (a != AX_E) length += mm[a] * mm[a];
-        }
-        length = sqrt(length);
-        if (length < 0.0001f) length = mm[AX_E]; // sola estrusione
-
-        if (feedrate < MotionConfig::MIN_FEEDRATE_Z) feedrate = MotionConfig::MIN_FEEDRATE_Z;
-        for (uint8_t a = 0; a < AX_COUNT; ++a) {
-            if (mm[a] > 0.0f) {
-                const float limit = maxFeed[a] * length / mm[a];
-                if (feedrate > limit) feedrate = limit;
-            }
-        }
-
-        uint32_t cruise = (uint32_t) (60.0e6f * length / (feedrate * (float) maxSteps));
-        if (cruise < MotionConfig::MIN_STEP_INTERVAL_US) cruise = MotionConfig::MIN_STEP_INTERVAL_US;
-        if (cruise > 60000UL) cruise = 60000UL;
-
-        // --- rampa trapezoidale sull'asse dominante (ricorrenza intera, niente float per step) ---
-        uint16_t startRate = MotionConfig::START_RATE_XY;
-        uint32_t accel = MotionConfig::ACCEL_XY;
-        if (dominant == AX_Z) {
-            startRate = MotionConfig::START_RATE_Z;
-            accel = MotionConfig::ACCEL_Z;
-        } else if (dominant == AX_E) {
-            startRate = MotionConfig::START_RATE_E;
-            accel = MotionConfig::ACCEL_E;
-        }
-
-        const uint32_t startInterval = 1000000UL / startRate;
-        uint32_t interval = cruise;
-        uint32_t rampSteps = 0;
-        uint32_t rampBase = 0; // step "virtuali" gia' percorsi per arrivare a startRate: n = v^2 / 2a
-
-        if (cruise < startInterval) {
-            interval = startInterval;
-            const float cruiseRate = 1.0e6f / (float) cruise;
-            rampBase = (uint32_t) (((float) startRate * (float) startRate) / (2.0f * (float) accel));
-            const uint32_t cruiseN = (uint32_t) ((cruiseRate * cruiseRate) / (2.0f * (float) accel));
-            rampSteps = cruiseN > rampBase ? cruiseN - rampBase : 0;
-            if (rampSteps > maxSteps / 2) rampSteps = maxSteps / 2;
-        }
-
-        // --- direzioni ---
-        stepperX.setDirection(delta[AX_X] >= 0);
-        stepperY.setDirection(delta[AX_Y] >= 0);
-        stepperZ.setDirection(delta[AX_Z] >= 0);
-
-        // I finecorsa sono sul lato minimo: fermano solo i movimenti verso il negativo
-        const bool watchX = delta[AX_X] < 0;
-        const bool watchY = delta[AX_Y] < 0;
-        const bool watchZ = delta[AX_Z] < 0;
-
-        uint32_t err[AX_COUNT];
-        for (uint8_t a = 0; a < AX_COUNT; ++a) err[a] = maxSteps / 2;
-
+        resyncAfterStop();
         abortRequested = false;
-        uint32_t next = hal::halMicros();
-
-        for (uint32_t i = 0; i < maxSteps; ++i) {
-            if ((i & 15) == 0 && !housekeeping()) {
-                return abortRequested ? MOVE_ABORTED : MOVE_ERROR;
-            }
-
-            if ((watchX && EndstopController::isTriggeredX()) ||
-                (watchY && EndstopController::isTriggeredY()) ||
-                (watchZ && EndstopController::isTriggeredZ())) {
-                return MOVE_ENDSTOP;
-            }
-
-            // Bresenham: ogni asse avanza in proporzione, il percorso resta una retta
-            for (uint8_t a = 0; a < AX_COUNT; ++a) {
-                err[a] += steps[a];
-                if (err[a] >= maxSteps) {
-                    err[a] -= maxSteps;
-                    stepAxis(a, delta[a] >= 0);
-                }
-            }
-
-            if (i < rampSteps) {
-                const uint32_t n = rampBase + i + 1;
-                interval -= (2 * interval) / (4 * n + 1);
-                if (interval < cruise) interval = cruise;
-            } else if (i >= maxSteps - rampSteps) {
-                const uint32_t n = rampBase + (maxSteps - i);
-                interval += (2 * interval) / (4 * n - 1);
-                if (interval > startInterval) interval = startInterval;
-            }
-
-            next += interval;
-            waitUntil(next, interval);
-        }
-
-        return MOVE_DONE;
     }
 
-    /** Traduce l'esito di un movimento nella risposta al comando. */
-    bool report(MoveResult result) {
-        switch (result) {
-            case MOVE_DONE:
-                return true;
-            case MOVE_ABORTED:
-                CompactResponse::reject(PSTR("ABORTED"));
-                break;
-            case MOVE_ENDSTOP:
-                CompactResponse::reject(PSTR("ENDSTOP"));
-                break;
-            default:
-                CompactResponse::setResult(CompactResponse::BLOCKED_MOTION_ERROR);
-                break;
-        }
-        return false;
-    }
-
-    /**
-     * Muove un solo asse a velocita' costante finche' stop() e' vero o si raggiunge maxSteps.
-     * @return step eseguiti, -1 se interrotto
-     */
-    int32_t runAxis(A4988Stepper &stepper, bool dir, uint16_t interval, int32_t maxSteps, bool (*stop)()) {
-        stepper.setDirection(dir);
-        abortRequested = false;
-        uint32_t next = hal::halMicros();
-        int32_t done = 0;
-
-        while (done < maxSteps && !(stop && stop())) {
-            if ((done & 15) == 0 && !housekeeping()) return -1;
-            stepper.step();
-            ++done;
-            next += interval;
-            waitUntil(next, interval);
-        }
-        return done;
-    }
-
-    void sendAxisEvent(PGM_P type, char axis, PGM_P event) {
-        const char name[2] = {axis, '\0'};
-        CompactResponse::begin(type);
-        CompactResponse::addStr(name);
-        CompactResponse::addP(event);
-        CompactResponse::end();
-    }
-
-    bool homeAxis(char axis, A4988Stepper &stepper, bool endstopEnabled, bool (*isTriggered)(),
-                  uint16_t interval, int32_t maxTravelSteps, int32_t bounceSteps, int32_t &position) {
-        if (!endstopEnabled) {
-            // Nessun finecorsa: la posizione attuale diventa l'origine
-            position = 0;
-            sendAxisEvent(PSTR("HOM"), axis, PSTR("SKIP"));
-            return true;
-        }
-
-        sendAxisEvent(PSTR("HOM"), axis, PSTR("START"));
-
-        if (!isTriggered()) {
-            if (runAxis(stepper, false, interval, maxTravelSteps, isTriggered) < 0) return false;
-            if (!isTriggered()) {
-                sendAxisEvent(PSTR("HOM"), axis, PSTR("FAIL"));
+    /** Accoda un segmento, aspettando un posto libero se serve. */
+    bool enqueue(const int32_t *delta, float feedrate, uint32_t commandNumber, uint8_t flags = 0) {
+        while (Planner::isFull()) {
+            if (!waitTask()) {
+                reportInterrupted();
                 return false;
             }
         }
-
-        if (runAxis(stepper, true, interval, bounceSteps, nullptr) < 0) return false;
-
-        position = bounceSteps; // il finecorsa e' lo zero, ci si e' allontanati di bounceSteps
-        sendAxisEvent(PSTR("HOM"), axis, PSTR("OK"));
+        Planner::addLine(delta, feedrate, commandNumber, flags);
         return true;
     }
 
-    void diagnoseAxis(A4988Stepper &stepper, bool (*isTriggered)(), int32_t bounceSteps,
-                      uint16_t interval, int32_t &position) {
-        CompactResponse::sendData(PSTR("DIG"), PSTR("START"));
-
-        const int32_t up = runAxis(stepper, true, interval, HomingConfig::DIAGNOSE_MAX_STEPS, isTriggered);
-        if (up < 0) {
-            report(abortRequested ? MOVE_ABORTED : MOVE_ERROR);
-            return;
-        }
-        position += up;
-        CompactResponse::begin(PSTR("DIG"));
-        CompactResponse::addP(PSTR("UP"));
-        CompactResponse::addInt(up);
-        CompactResponse::end();
-
-        const int32_t down = runAxis(stepper, false, interval, HomingConfig::DIAGNOSE_MAX_STEPS, isTriggered);
-        if (down < 0) {
-            report(abortRequested ? MOVE_ABORTED : MOVE_ERROR);
-            return;
-        }
-        position -= down;
-
-        // si allontana dal finecorsa
-        const int32_t back = runAxis(stepper, true, interval, bounceSteps, nullptr);
-        if (back > 0) position += back;
-
-        CompactResponse::begin(PSTR("DIG"));
-        CompactResponse::addP(PSTR("DN"));
-        CompactResponse::addInt(down);
-        CompactResponse::end();
-        CompactResponse::sendData(PSTR("DIG"), PSTR("COMPLETE"));
-    }
-
-    void handleMove(bool absolute, const char *params) {
+    void handleMove(bool absolute, const char *params, uint32_t commandNumber) {
         if (StateMachine::getState() != MachineState::Printing) {
             CompactResponse::reject(PSTR("INV_STATE"));
             return;
         }
+        settle();
 
         int32_t delta[AX_COUNT] = {0, 0, 0, 0};
         float v;
 
-        if (ParamParser::get(params, 'X', v)) {
-            delta[AX_X] = lround(v * MotionConfig::STEPS_PER_MM_X) - (absolute ? currentPosition.x : 0);
-        }
-        if (ParamParser::get(params, 'Y', v)) {
-            delta[AX_Y] = lround(v * MotionConfig::STEPS_PER_MM_Y) - (absolute ? currentPosition.y : 0);
-        }
-        if (ParamParser::get(params, 'Z', v)) {
-            delta[AX_Z] = lround(v * MotionConfig::STEPS_PER_MM_Z) - (absolute ? currentPosition.z : 0);
+        for (uint8_t a = 0; a < 3; ++a) {
+            if (ParamParser::get(params, (char) ('X' + a), v)) {
+                delta[a] = lround(v * STEPS_PER_MM[a]) - (absolute ? Planner::position(a) : 0);
+            }
         }
         if (ParamParser::get(params, 'E', v) && v != 0.0f) {
             if (!ExtruderController::canExtrude()) {
@@ -341,7 +120,87 @@ namespace {
             lastFeedrate = v;
         }
 
-        report(runLine(delta, lastFeedrate));
+        if (delta[AX_X] || delta[AX_Y] || delta[AX_Z] || delta[AX_E]) {
+            enqueue(delta, lastFeedrate, commandNumber);
+        }
+    }
+
+    /**
+     * Muove un asse fino al finecorsa (o per maxSteps) e attende la fine.
+     * @return step realmente percorsi, -1 se interrotto
+     */
+    int32_t seek(uint8_t axis, bool positive, int32_t maxSteps, float feedrate, bool untilEndstop,
+                 uint32_t commandNumber) {
+        const int32_t before = Stepper::position(axis);
+        int32_t delta[AX_COUNT] = {0, 0, 0, 0};
+        delta[axis] = positive ? maxSteps : -maxSteps;
+
+        if (!enqueue(delta, feedrate, commandNumber, untilEndstop ? Planner::FLAG_SEEK_ENDSTOP : 0)) return -1;
+        if (!MotionController::synchronize()) return -1;
+        resyncAfterStop();
+
+        return labs(Stepper::position(axis) - before);
+    }
+
+    void sendAxisEvent(PGM_P type, char axis, PGM_P event) {
+        const char name[2] = {axis, '\0'};
+        CompactResponse::begin(type);
+        CompactResponse::addStr(name);
+        CompactResponse::addP(event);
+        CompactResponse::end();
+    }
+
+    bool homeAxis(uint8_t axis, bool endstopEnabled, bool (*isTriggered)(), float feedrate,
+                  float maxTravelMm, int32_t bounceSteps) {
+        const char name = (char) ('X' + axis);
+
+        if (!endstopEnabled) {
+            // Nessun finecorsa: la posizione attuale diventa l'origine
+            Stepper::setPosition(axis, 0);
+            Planner::setPosition(axis, 0);
+            sendAxisEvent(PSTR("HOM"), name, PSTR("SKIP"));
+            return true;
+        }
+
+        sendAxisEvent(PSTR("HOM"), name, PSTR("START"));
+
+        if (!isTriggered()) {
+            if (seek(axis, false, (int32_t) (maxTravelMm * STEPS_PER_MM[axis]), feedrate, true, 0) < 0) return false;
+            if (!Stepper::endstopHit()) {
+                sendAxisEvent(PSTR("HOM"), name, PSTR("FAIL"));
+                CompactResponse::setResult(CompactResponse::REJECTED_ERROR);
+                return false;
+            }
+        }
+
+        if (seek(axis, true, bounceSteps, feedrate, false, 0) < 0) return false;
+
+        // il finecorsa e' lo zero: ci si e' allontanati di bounceSteps
+        Stepper::setPosition(axis, bounceSteps);
+        Planner::setPosition(axis, bounceSteps);
+        sendAxisEvent(PSTR("HOM"), name, PSTR("OK"));
+        return true;
+    }
+
+    void diagnoseAxis(uint8_t axis, int32_t bounceSteps, float feedrate) {
+        CompactResponse::sendData(PSTR("DIG"), PSTR("START"));
+
+        const int32_t up = seek(axis, true, HomingConfig::DIAGNOSE_MAX_STEPS, feedrate, true, 0);
+        if (up < 0) return;
+        CompactResponse::begin(PSTR("DIG"));
+        CompactResponse::addP(PSTR("UP"));
+        CompactResponse::addInt(up);
+        CompactResponse::end();
+
+        const int32_t down = seek(axis, false, HomingConfig::DIAGNOSE_MAX_STEPS, feedrate, true, 0);
+        if (down < 0) return;
+        if (seek(axis, true, bounceSteps, feedrate, false, 0) < 0) return; // via dal finecorsa
+
+        CompactResponse::begin(PSTR("DIG"));
+        CompactResponse::addP(PSTR("DN"));
+        CompactResponse::addInt(down);
+        CompactResponse::end();
+        CompactResponse::sendData(PSTR("DIG"), PSTR("COMPLETE"));
     }
 }
 
@@ -350,9 +209,17 @@ namespace MotionController {
         stepperX.init(StepperConfig::STEPPER_INVERT_X);
         stepperY.init(StepperConfig::STEPPER_INVERT_Y);
         stepperZ.init(StepperConfig::STEPPER_INVERT_Z);
-        stepperX.enable(StepperConfig::STEPPER_ENABLE_X);
-        stepperY.enable(StepperConfig::STEPPER_ENABLE_Y);
-        stepperZ.enable(StepperConfig::STEPPER_ENABLE_Z);
+        setEnabled(true);
+
+        abortRequested = false;
+        referenced = false;
+        eRemainder = 0.0f;
+        Planner::init();
+        Stepper::init();
+    }
+
+    void update() {
+        resyncAfterStop();
     }
 
     void setEnabled(bool enabled) {
@@ -361,21 +228,69 @@ namespace MotionController {
         stepperZ.enable(enabled && StepperConfig::STEPPER_ENABLE_Z);
     }
 
-    void emergencyStop() {
-        setEnabled(false);
-        CompactResponse::sendData(PSTR("STP"), PSTR("EMG"));
+    bool isIdle() {
+        return Stepper::isIdle();
     }
 
-    bool moveExtruder(int32_t steps, float feedrate) {
+    bool synchronize() {
+        while (!Stepper::isIdle()) {
+            if (!waitTask()) {
+                reportInterrupted();
+                return false;
+            }
+        }
+        return true;
+    }
+
+    uint32_t lastCompletedCommand(uint32_t current) {
+        return Stepper::isIdle() ? current : Stepper::lastCompletedCommand();
+    }
+
+    void abort() {
+        if (Stepper::isIdle()) return;
+        abortRequested = true;
+        Stepper::hold();
+    }
+
+    void emergencyStop() {
+        Stepper::quickStop();
+        setEnabled(false);
+    }
+
+    bool queueExtruder(int32_t steps, float feedrate, uint32_t commandNumber) {
+        if (StateMachine::getState() == MachineState::Error) {
+            CompactResponse::setResult(CompactResponse::BLOCKED_MOTION_ERROR);
+            return false;
+        }
+        settle();
+        if (steps == 0) return true;
         const int32_t delta[AX_COUNT] = {0, 0, 0, steps};
-        return report(runLine(delta, feedrate));
+        return enqueue(delta, feedrate, commandNumber);
+    }
+
+    bool isPositionReferenced() {
+        return referenced;
+    }
+
+    int32_t extruderSteps() {
+        return Stepper::position(AX_E);
+    }
+
+    void resetExtruderSteps() {
+        Stepper::setPosition(AX_E, 0);
+        Planner::setPosition(AX_E, 0);
+        eRemainder = 0.0f;
     }
 
     position::Position getPosition() {
-        return currentPosition;
+        position::Position p;
+        p.x = Stepper::position(AX_X);
+        p.y = Stepper::position(AX_Y);
+        p.z = Stepper::position(AX_Z);
+        return p;
     }
 
-    void handle(uint8_t code, const char *params) {
+    void handle(uint8_t code, const char *params, uint32_t commandNumber) {
         if (StateMachine::getState() == MachineState::Error && code != 0 && code != 114) {
             CompactResponse::begin(PSTR("ERR"));
             CompactResponse::addStr(SafetyManager::getErrorReason());
@@ -386,52 +301,57 @@ namespace MotionController {
 
         switch (code) {
             case 10:
-                handleMove(false, params);
+                handleMove(false, params, commandNumber);
                 break;
             case 11:
-                handleMove(true, params);
+                handleMove(true, params, commandNumber);
                 break;
             case 12: {
+                if (!synchronize()) break;
+                settle();
                 float v;
-                if (ParamParser::get(params, 'X', v)) currentPosition.x = lround(v * MotionConfig::STEPS_PER_MM_X);
-                if (ParamParser::get(params, 'Y', v)) currentPosition.y = lround(v * MotionConfig::STEPS_PER_MM_Y);
-                if (ParamParser::get(params, 'Z', v)) currentPosition.z = lround(v * MotionConfig::STEPS_PER_MM_Z);
+                for (uint8_t a = 0; a < 3; ++a) {
+                    if (ParamParser::get(params, (char) ('X' + a), v)) {
+                        const int32_t steps = lround(v * STEPS_PER_MM[a]);
+                        Stepper::setPosition(a, steps);
+                        Planner::setPosition(a, steps);
+                    }
+                }
+                referenced = true;
                 break;
             }
             case 99: {
+                if (!synchronize()) break;
+                settle();
                 float feedrate = 800.0f;
                 ParamParser::get(params, 'F', feedrate);
 
                 if (strchr(params, 'X')) {
-                    diagnoseAxis(stepperX, EndstopController::isTriggeredX, HomingConfig::HOMING_X_BOUNCE_OFFSET,
-                                 computeDelayMicros(feedrate, MotionConfig::STEPS_PER_MM_X,
-                                                    MotionConfig::MIN_FEEDRATE_X, MotionConfig::MAX_FEEDRATE_X),
-                                 currentPosition.x);
+                    diagnoseAxis(AX_X, HomingConfig::HOMING_X_BOUNCE_OFFSET, feedrate);
                 } else if (strchr(params, 'Y')) {
-                    diagnoseAxis(stepperY, EndstopController::isTriggeredY, HomingConfig::HOMING_Y_BOUNCE_OFFSET,
-                                 computeDelayMicros(feedrate, MotionConfig::STEPS_PER_MM_Y,
-                                                    MotionConfig::MIN_FEEDRATE_Y, MotionConfig::MAX_FEEDRATE_Y),
-                                 currentPosition.y);
+                    diagnoseAxis(AX_Y, HomingConfig::HOMING_Y_BOUNCE_OFFSET, feedrate);
                 } else if (strchr(params, 'Z')) {
-                    diagnoseAxis(stepperZ, EndstopController::isTriggeredZ, HomingConfig::HOMING_Z_BOUNCE_OFFSET,
-                                 computeDelayMicros(feedrate, MotionConfig::STEPS_PER_MM_Z,
-                                                    MotionConfig::MIN_FEEDRATE_Z, MotionConfig::MAX_FEEDRATE_Z),
-                                 currentPosition.z);
+                    diagnoseAxis(AX_Z, HomingConfig::HOMING_Z_BOUNCE_OFFSET, feedrate);
                 } else {
                     CompactResponse::reject(PSTR("NO_AXIS"));
                 }
                 break;
             }
             case 114: {
+                // Posizione reale in questo istante: non attende la fine dei movimenti
+                const position::Position p = getPosition();
                 CompactResponse::begin(PSTR("POS"), true);
-                CompactResponse::addFloat((float) currentPosition.x / MotionConfig::STEPS_PER_MM_X, 3);
-                CompactResponse::addFloat((float) currentPosition.y / MotionConfig::STEPS_PER_MM_Y, 3);
-                CompactResponse::addFloat((float) currentPosition.z / MotionConfig::STEPS_PER_MM_Z, 3);
+                CompactResponse::addFloat((float) p.x / MotionConfig::STEPS_PER_MM_X, 3);
+                CompactResponse::addFloat((float) p.y / MotionConfig::STEPS_PER_MM_Y, 3);
+                CompactResponse::addFloat((float) p.z / MotionConfig::STEPS_PER_MM_Z, 3);
+                CompactResponse::addInt(referenced ? 1 : 0);
                 CompactResponse::end();
                 break;
             }
             case 0:
                 emergencyStop();
+                resyncAfterStop();
+                CompactResponse::sendData(PSTR("STP"), PSTR("EMG"));
                 break;
             default:
                 CompactResponse::reject(PSTR("UNK_MCODE"));
@@ -439,33 +359,29 @@ namespace MotionController {
         }
     }
 
-    bool homeAllAxes() {
-        const bool ok =
-                homeAxis('X', stepperX, EndstopConfig::ENDSTOP_ENABLED_X, EndstopController::isTriggeredX,
-                         computeDelayMicros(HomingConfig::HOMING_X_FEEDRATE, MotionConfig::STEPS_PER_MM_X,
-                                            MotionConfig::MIN_FEEDRATE_X, MotionConfig::MAX_FEEDRATE_X),
-                         (int32_t) (HomingConfig::HOMING_X_MAX_TRAVEL * MotionConfig::STEPS_PER_MM_X),
-                         HomingConfig::HOMING_X_BOUNCE_OFFSET, currentPosition.x) &&
-                homeAxis('Y', stepperY, EndstopConfig::ENDSTOP_ENABLED_Y, EndstopController::isTriggeredY,
-                         computeDelayMicros(HomingConfig::HOMING_Y_FEEDRATE, MotionConfig::STEPS_PER_MM_Y,
-                                            MotionConfig::MIN_FEEDRATE_Y, MotionConfig::MAX_FEEDRATE_Y),
-                         (int32_t) (HomingConfig::HOMING_Y_MAX_TRAVEL * MotionConfig::STEPS_PER_MM_Y),
-                         HomingConfig::HOMING_Y_BOUNCE_OFFSET, currentPosition.y) &&
-                homeAxis('Z', stepperZ, EndstopConfig::ENDSTOP_ENABLED_Z, EndstopController::isTriggeredZ,
-                         computeDelayMicros(HomingConfig::HOMING_Z_FEEDRATE, MotionConfig::STEPS_PER_MM_Z,
-                                            MotionConfig::MIN_FEEDRATE_Z, MotionConfig::MAX_FEEDRATE_Z),
-                         (int32_t) (HomingConfig::HOMING_Z_MAX_TRAVEL * MotionConfig::STEPS_PER_MM_Z),
-                         HomingConfig::HOMING_Z_BOUNCE_OFFSET, currentPosition.z);
+    bool home(uint8_t axes) {
+        if (!synchronize()) return false;
+        settle();
+        if (axes == 0) axes = 0x07;
 
-        if (!ok) {
-            if (abortRequested) {
-                report(MOVE_ABORTED);
-            } else if (StateMachine::getState() == MachineState::Error) {
-                report(MOVE_ERROR);
-            } else {
-                CompactResponse::reject(PSTR("HOME_FAIL"));
-            }
+        bool ok = true;
+        if (ok && (axes & 0x01)) {
+            ok = homeAxis(AX_X, EndstopConfig::ENDSTOP_ENABLED_X, EndstopController::isTriggeredX,
+                          HomingConfig::HOMING_X_FEEDRATE, HomingConfig::HOMING_X_MAX_TRAVEL,
+                          HomingConfig::HOMING_X_BOUNCE_OFFSET);
         }
+        if (ok && (axes & 0x02)) {
+            ok = homeAxis(AX_Y, EndstopConfig::ENDSTOP_ENABLED_Y, EndstopController::isTriggeredY,
+                          HomingConfig::HOMING_Y_FEEDRATE, HomingConfig::HOMING_Y_MAX_TRAVEL,
+                          HomingConfig::HOMING_Y_BOUNCE_OFFSET);
+        }
+        if (ok && (axes & 0x04)) {
+            ok = homeAxis(AX_Z, EndstopConfig::ENDSTOP_ENABLED_Z, EndstopController::isTriggeredZ,
+                          HomingConfig::HOMING_Z_FEEDRATE, HomingConfig::HOMING_Z_MAX_TRAVEL,
+                          HomingConfig::HOMING_Z_BOUNCE_OFFSET);
+        }
+
+        if (ok) referenced = true;
         return ok;
     }
 }
