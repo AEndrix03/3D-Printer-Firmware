@@ -21,9 +21,11 @@ namespace MotionController {
     /**
      * @brief Gestisce un comando di movimento.
      *  - 0:   emergency stop
-     *  - 10:  movimento relativo  (X Y Z E in mm, F in mm/min) - accodato
+     *  - 10:  movimento relativo  (X Y Z E in mm, F in mm/min) - accodato.
+     *         10 e 11 rifiutano (ERR LIMIT) i movimenti oltre il volume di lavoro
      *  - 11:  movimento assoluto  (X Y Z assoluti, assi omessi invariati; E relativo) - accodato
-     *  - 12:  imposta la posizione corrente (X Y Z) - attende la fine dei movimenti
+     *  - 12:  imposta la posizione corrente (X Y Z) - attende la fine dei movimenti.
+     *         Gli assi impostati diventano riferiti: da li' valgono i limiti di corsa
      *  - 99:  diagnosi asse
      *  - 114: posizione reale in questo istante -> "CRT POS x y z <riferita 0/1>"
      */
@@ -53,7 +55,10 @@ namespace MotionController {
     /** Arresto controllato richiesto dall'host ('!'): decelera e svuota la coda. */
     void abort();
 
-    /** Abilita/disabilita i driver (se il pin ENABLE e' configurato). */
+    /**
+     * Da' o toglie corrente ai motori (pin di enable comune). Togliendola la posizione
+     * perde il riferimento: serve un nuovo homing (o M12) prima di fidarsene.
+     */
     void setEnabled(bool enabled);
 
     /**

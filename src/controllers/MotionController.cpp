@@ -24,7 +24,7 @@ namespace {
     using Planner::AX_E;
     using Planner::AX_COUNT;
 
-    // Usati solo per configurare i pin e l'enable: gli step li genera lo Stepper in interrupt
+    // Usati solo per configurare i pin: gli step li genera lo Stepper in interrupt
     A4988Stepper stepperX(PIN_X_STEP, PIN_X_DIR);
     A4988Stepper stepperY(PIN_Y_STEP, PIN_Y_DIR);
     A4988Stepper stepperZ(PIN_Z_STEP, PIN_Z_DIR);
@@ -33,9 +33,31 @@ namespace {
     float lastFeedrate = 1000.0f; // F e' modale
     bool abortRequested = false;
     bool referenced = false;
+    bool motorsOn = false;
+    uint8_t limitAxes = 0;        // bit per asse: posizione riferita, i limiti di corsa valgono
 
     const float STEPS_PER_MM[3] = {MotionConfig::STEPS_PER_MM_X, MotionConfig::STEPS_PER_MM_Y,
                                    MotionConfig::STEPS_PER_MM_Z};
+
+    const int32_t TRAVEL_MAX_STEPS[3] PROGMEM = {
+            (int32_t) (MotionConfig::TRAVEL_MAX_X * MotionConfig::STEPS_PER_MM_X),
+            (int32_t) (MotionConfig::TRAVEL_MAX_Y * MotionConfig::STEPS_PER_MM_Y),
+            (int32_t) (MotionConfig::TRAVEL_MAX_Z * MotionConfig::STEPS_PER_MM_Z)};
+
+    /**
+     * Limiti software di corsa: valgono solo per gli assi con posizione riferita.
+     * Un asse gia' fuori dal volume puo' sempre rientrare.
+     */
+    bool withinTravel(const int32_t *delta) {
+        if (!MotionConfig::SOFT_LIMITS_ENABLED) return true;
+        for (uint8_t a = 0; a < 3; ++a) {
+            if (!(limitAxes & (1 << a)) || delta[a] == 0) continue;
+            const int32_t target = Planner::position(a) + delta[a];
+            const int32_t max = (int32_t) pgm_read_dword(&TRAVEL_MAX_STEPS[a]);
+            if ((delta[a] < 0 && target < 0) || (delta[a] > 0 && target > max)) return false;
+        }
+        return true;
+    }
 
     /** Dopo un arresto la coda e' stata svuotata: il planner riparte dalla posizione reale. */
     void resyncAfterStop() {
@@ -87,6 +109,8 @@ namespace {
                 return false;
             }
         }
+        // I motori spenti (emergenza rientrata, risparmio energetico) si riaccendono al primo movimento
+        if (!motorsOn) MotionController::setEnabled(true);
         Planner::addLine(delta, feedrate, commandNumber, flags);
         return true;
     }
@@ -105,6 +129,10 @@ namespace {
             if (ParamParser::get(params, (char) ('X' + a), v)) {
                 delta[a] = lround(v * STEPS_PER_MM[a]) - (absolute ? Planner::position(a) : 0);
             }
+        }
+        if (!withinTravel(delta)) {
+            CompactResponse::reject(PSTR("LIMIT"));
+            return;
         }
         if (ParamParser::get(params, 'E', v) && v != 0.0f) {
             if (!ExtruderController::canExtrude()) {
@@ -158,6 +186,7 @@ namespace {
             // Nessun finecorsa: la posizione attuale diventa l'origine
             Stepper::setPosition(axis, 0);
             Planner::setPosition(axis, 0);
+            limitAxes |= (uint8_t) (1 << axis);
             sendAxisEvent(PSTR("HOM"), name, PSTR("SKIP"));
             return true;
         }
@@ -178,6 +207,7 @@ namespace {
         // il finecorsa e' lo zero: ci si e' allontanati di bounceSteps
         Stepper::setPosition(axis, bounceSteps);
         Planner::setPosition(axis, bounceSteps);
+        limitAxes |= (uint8_t) (1 << axis);
         sendAxisEvent(PSTR("HOM"), name, PSTR("OK"));
         return true;
     }
@@ -209,10 +239,12 @@ namespace MotionController {
         stepperX.init(StepperConfig::STEPPER_INVERT_X);
         stepperY.init(StepperConfig::STEPPER_INVERT_Y);
         stepperZ.init(StepperConfig::STEPPER_INVERT_Z);
-        setEnabled(true);
 
         abortRequested = false;
         referenced = false;
+        limitAxes = 0;
+        pinMode(PIN_STEPPERS_ENABLE, OUTPUT);
+        setEnabled(true);
         eRemainder = 0.0f;
         Planner::init();
         Stepper::init();
@@ -223,9 +255,13 @@ namespace MotionController {
     }
 
     void setEnabled(bool enabled) {
-        stepperX.enable(enabled && StepperConfig::STEPPER_ENABLE_X);
-        stepperY.enable(enabled && StepperConfig::STEPPER_ENABLE_Y);
-        stepperZ.enable(enabled && StepperConfig::STEPPER_ENABLE_Z);
+        digitalWrite(PIN_STEPPERS_ENABLE, enabled == StepperConfig::ENABLE_ACTIVE_LOW ? LOW : HIGH);
+        motorsOn = enabled;
+        if (!enabled) {
+            // Senza corrente i motori possono essere spostati: la posizione non e' piu' affidabile
+            referenced = false;
+            limitAxes = 0;
+        }
     }
 
     bool isIdle() {
@@ -315,6 +351,7 @@ namespace MotionController {
                         const int32_t steps = lround(v * STEPS_PER_MM[a]);
                         Stepper::setPosition(a, steps);
                         Planner::setPosition(a, steps);
+                        limitAxes |= (uint8_t) (1 << a);
                     }
                 }
                 referenced = true;

@@ -10,7 +10,7 @@
 #include "../include/CompactResponse.hpp"
 
 namespace {
-    // Usato solo per configurare pin ed enable: gli step li genera lo Stepper
+    // Usato solo per configurare i pin: gli step li genera lo Stepper
     A4988Stepper stepperE(PIN_E_STEP, PIN_E_DIR);
     float stepsPerMm = ExtruderConfig::STEPS_PER_MM_E;
 
@@ -28,7 +28,6 @@ namespace {
 namespace ExtruderController {
     void init() {
         stepperE.init(StepperConfig::STEPPER_INVERT_E);
-        stepperE.enable(StepperConfig::STEPPER_ENABLE_E);
     }
 
     float getStepsPerMm() {
@@ -106,7 +105,6 @@ namespace ExtruderController {
     }
 
     void emergencyStop() {
-        stepperE.enable(false);
         CompactResponse::sendData(PSTR("STP"), PSTR("EMG"));
     }
 }

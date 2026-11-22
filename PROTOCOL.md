@@ -88,11 +88,11 @@ Vedi `contracts/*.json`. In sintesi:
 
 | Cmd | Descrizione |
 |-----|-------------|
-| `M10 X Y Z E F` | movimento relativo (mm, mm/min) |
+| `M10 X Y Z E F` | movimento relativo (mm, mm/min); rifiutato con `ERR LIMIT` se esce dal volume di lavoro |
 | `M11 X Y Z E F` | movimento assoluto; assi omessi invariati; `E` sempre relativo |
-| `M12 X Y Z` | dichiara la posizione corrente |
+| `M12 X Y Z` | dichiara la posizione corrente; gli assi indicati diventano riferiti |
 | `M114` | posizione reale in questo istante -> `CRT POS x y z <r>`; `r`=1 se riferita (homing o `M12` dall'accensione) |
-| `M0` | emergency stop |
+| `M0` | emergency stop: ferma gli step e toglie corrente ai motori |
 | `A10/A11/A12 E F` | estrusione / ritrazione / spurgo |
 | `T10 S<gradi>` | target hotend (rifiutato con `NO_SENSOR` se il termistore e' disabilitato) |
 | `T20` | temperatura -> `CRT TMP <attuale> <target>` |
@@ -115,3 +115,16 @@ dal driver con errore di corda di 0,02 mm e raccordati dal planner del firmware.
   volte ha sforato il proprio intervallo. Con `MAX_STEP_RATE` = 8000 l'intervallo
   minimo e' 125 us: se la durata massima si avvicina o le scadenze mancate non sono
   zero, la CPU e' satura e `MAX_STEP_RATE` va abbassato.
+
+## Limiti di corsa e alimentazione dei motori
+
+- **Limiti software.** Un movimento (`M10`, `M11`) che porterebbe un asse riferito fuori da
+  `[0, TRAVEL_MAX]` (`MotionConfig.hpp`, 220 x 220 x 200 mm) viene rifiutato per intero con
+  `ERR LIMIT` e nessuno step viene eseguito. Lo zero e' il finecorsa. Un asse diventa riferito
+  con l'homing (`S0`) o con `M12`; finche' non lo e' i limiti non si applicano. Un asse che si
+  trova gia' fuori dal volume puo' sempre rientrare.
+- **Pin di enable.** `PIN_STEPPERS_ENABLE` (D8, comune a tutti i driver, attivo basso) toglie
+  corrente ai motori in emergenza (`M0`, allarmi `ALM`) e dopo 30 minuti di inattivita' da
+  fermi; in pausa restano alimentati. Il primo movimento li riaccende. Senza corrente gli assi
+  possono essere spostati a mano, quindi la posizione perde il riferimento (`M114` riporta
+  `r`=0) e serve un nuovo homing.

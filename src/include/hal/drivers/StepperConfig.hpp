@@ -1,10 +1,8 @@
 #pragma once
 
 namespace StepperConfig {
-    constexpr bool STEPPER_ENABLE_X = true;
-    constexpr bool STEPPER_ENABLE_Y = true;
-    constexpr bool STEPPER_ENABLE_Z = true;
-    constexpr bool STEPPER_ENABLE_E = true;
+    // Livello del pin di enable che alimenta i motori: LOW per A4988/DRV8825/TMC
+    constexpr bool ENABLE_ACTIVE_LOW = true;
 
     constexpr bool STEPPER_INVERT_X = true;
     constexpr bool STEPPER_INVERT_Y = false;

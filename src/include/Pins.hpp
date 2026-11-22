@@ -12,6 +12,7 @@ constexpr uint8_t PIN_Z_STEP = 32;
 constexpr uint8_t PIN_Z_DIR = 35;
 constexpr uint8_t PIN_E_STEP = 14;
 constexpr uint8_t PIN_E_DIR = 12;
+constexpr uint8_t PIN_STEPPERS_ENABLE = 4; // enable comune a tutti i driver
 
 // Finecorsa
 constexpr uint8_t PIN_ENDSTOP_X = 34;
@@ -37,6 +38,8 @@ constexpr uint8_t PIN_Z_STEP = 4;
 constexpr uint8_t PIN_Z_DIR = 7;
 constexpr uint8_t PIN_E_STEP = 12;
 constexpr uint8_t PIN_E_DIR = 13;
+// Enable comune a tutti i driver (D8, come sulla CNC Shield v3 a cui corrisponde il resto della piedinatura)
+constexpr uint8_t PIN_STEPPERS_ENABLE = 8;
 
 // Finecorsa
 constexpr uint8_t PIN_ENDSTOP_X = 9;

@@ -11,6 +11,14 @@ namespace MotionConfig {
     constexpr float MAX_FEEDRATE_Y = 5000.0f;
     constexpr float MAX_FEEDRATE_Z = 150.0f;
 
+    // Volume di lavoro (mm), misurato dal finecorsa (zero). Un movimento che porterebbe
+    // un asse riferito fuori da [0, TRAVEL_MAX] viene rifiutato con "ERR LIMIT".
+    // VERIFICARE sulla macchina reale.
+    constexpr bool SOFT_LIMITS_ENABLED = true;
+    constexpr float TRAVEL_MAX_X = 220.0f;
+    constexpr float TRAVEL_MAX_Y = 220.0f;
+    constexpr float TRAVEL_MAX_Z = 200.0f;
+
     constexpr float MIN_FEEDRATE = 30.0f;     // mm/min lungo il percorso
 
     // Accelerazioni massime per asse (mm/s^2). Un movimento che coinvolge piu' assi

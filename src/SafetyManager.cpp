@@ -22,6 +22,11 @@ namespace {
     char errorReason[12] = {0};
 
     SafetyManager::PowerState powerState = SafetyManager::ACTIVE;
+
+    /** In pausa i motori restano alimentati: la stampa deve poter riprendere dalla stessa posizione. */
+    void disableMotorsUnlessPaused() {
+        if (StateMachine::getState() != MachineState::Paused) MotionController::setEnabled(false);
+    }
 }
 
 namespace SafetyManager {
@@ -87,13 +92,13 @@ namespace SafetyManager {
                 break;
             case SLEEP:
                 CompactResponse::sendData(PSTR("PWR"), PSTR("SLEEP"));
-                MotionController::setEnabled(false);
+                disableMotorsUnlessPaused();
                 TempController::setTargetTemperature(0);
                 FanController::setSpeed(16);
                 break;
             case DEEP_SLEEP:
                 CompactResponse::sendData(PSTR("PWR"), PSTR("DEEP"));
-                MotionController::setEnabled(false);
+                disableMotorsUnlessPaused();
                 TempController::setTargetTemperature(0);
                 FanController::setSpeed(0);
                 break;
