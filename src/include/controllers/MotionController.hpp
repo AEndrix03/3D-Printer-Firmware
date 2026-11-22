@@ -1,74 +1,52 @@
 #pragma once
 
-#include "../hal/drivers/stepper/A4988Stepper.hpp"
+#include <stdint.h>
 #include "../motion/Position.hpp"
 
 /**
- * @brief Gestisce i movimenti della macchina lungo gli assi XYZ.
+ * @brief Gestisce i movimenti della macchina lungo gli assi XYZ, coordinati con l'estrusore.
+ *
+ * I movimenti sono segmenti rettilinei (Bresenham su 4 assi) con rampa di
+ * accelerazione/decelerazione; archi e spline vengono spezzati dal driver.
+ * Sono bloccanti, ma durante l'esecuzione restano attivi watchdog, protezioni
+ * termiche, messaggi BUSY e l'abort dall'host (carattere '!').
  */
 namespace MotionController {
     /**
-     * @brief Inizializza eventuali driver drivers e limiti.
+     * @brief Inizializza i driver stepper.
      */
     void init();
 
     /**
      * @brief Gestisce un comando di movimento.
-     * @param code Codice specifico del comando (es. 10 = MOVE, 0 = STOP)
-     * @param params Parametri associati (es. "X10.0 Y20.0 Z30.0 F1500")
+     *  - 0:   emergency stop
+     *  - 10:  movimento relativo  (X Y Z E in mm, F in mm/min)
+     *  - 11:  movimento assoluto  (X Y Z assoluti, assi omessi invariati; E relativo)
+     *  - 12:  imposta la posizione corrente (X Y Z)
+     *  - 99:  diagnosi asse
+     *  - 114: posizione corrente -> "CRT POS x y z"
      */
     void handle(uint8_t code, const char *params);
 
     /**
-     * @brief Muove la testina/asse alla posizione specificata.
-     * @param x Coordinata X (mm)
-     * @param y Coordinata Y (mm)
-     * @param z Coordinata Z (mm)
-     * @param f Velocità di movimento (feedrate, mm/min)
+     * @brief Estrusione senza movimento XYZ (usata da ExtruderController).
+     * @return false se interrotta
      */
-    void moveTo(float x, float y, float z, float f);
+    bool moveExtruder(int32_t steps, float feedrate);
 
-    void goTo(float targetX, float targetY, float targetZ, float feedrate);
+    /** Abilita/disabilita i driver (se il pin ENABLE e' configurato). */
+    void setEnabled(bool enabled);
 
     /**
-     * @brief Arresta immediatamente tutti i movimenti.
+     * @brief Segnala l'arresto di emergenza all'host e disabilita i driver.
      */
     void emergencyStop();
 
     /**
-     * @brief Avvia il processo di homing per un certo asse
-     * @param stepper Stepper dell'asse
-     * @param isTriggered Trigger del finecorsa
-     * @param stepsPerMm Steps per millimetro
-     * @param feedrate Velocità di movimento (mm/min)
-     * @param minRate Minima velocità di movimento (mm/min)
-     * @param maxRate Massima velocità di movimento (mm/min)
+     * @brief Homing di tutti gli assi. Gli assi senza finecorsa abilitato vengono azzerati sul posto.
+     * @return false se un finecorsa non scatta entro la corsa massima o se interrotto
      */
-    void homeAxis(A4988Stepper &stepper, bool (*isTriggered)(), float stepsPerMm, float feedrate, float minRate,
-                  float maxRate, int32_t *stepsPositionTarget);
-
-    /**
-     * @brief Sposta i cursori fuori dall'area degli endstop.
-     * @param left True se i cursori sono bloccati a sinistra, false se a destra
-     */
-    void releaseFromEndstops(bool left);
-
-    /**
-     * @brief Avvia il processo di homing per ogni asse
-     */
-    void homeAllAxes();
-
-    /**
-     * @brief Inizia la diagnosi di un asse, conta gli step effettuati in ogni direzione ad una certa velocità
-     * @param stepper Stepper dell'asse
-     * @param stepsPerMm Step per millimetro
-     * @param feedrate Velocità di movimento (mm/min)
-     * @param minRate Minima velocità di movimento (mm/min)
-     * @param maxRate Massima velocità di movimento (mm/min)
-     */
-    void diagnoseAxis(A4988Stepper &stepper, bool (*isTriggered)(), float stepsPerMm, int bounceSteps, float feedrate,
-                      float minRate,
-                      float maxRate);
+    bool homeAllAxes();
 
     position::Position getPosition();
 }

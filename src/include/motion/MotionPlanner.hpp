@@ -1,13 +1,9 @@
-struct MotionCommand {
-    float x, y, z, feedrate;
-};
+#pragma once
 
-struct MotionPlan {
-    int stepsX, stepsY, stepsZ;
-    bool dirX, dirY, dirZ;
-    unsigned int delayMicrosX, delayMicrosY, delayMicrosZ;
-};
+#include <stdint.h>
 
-unsigned int computeDelayMicros(float feedrate, float stepsPerMm, float minFeedrate, float maxFeedrate);
-
-MotionPlan planMotion(const MotionCommand &cmd);
+/**
+ * @brief Intervallo tra step (microsecondi) per un asse a velocita' costante.
+ * @param feedrate mm/min, limitato tra minFeedrate e maxFeedrate
+ */
+uint16_t computeDelayMicros(float feedrate, float stepsPerMm, float minFeedrate, float maxFeedrate);

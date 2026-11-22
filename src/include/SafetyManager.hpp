@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stdint.h>
+#include <Arduino.h>
 
 namespace SafetyManager {
     void init();
@@ -9,17 +9,21 @@ namespace SafetyManager {
 
     void notifyCommandReceived();
 
-    void emergencyStop(const char *reason);
+    /**
+     * @brief Arresto di emergenza: heater off, stato Error. Idempotente:
+     * se un errore e' gia' attivo resta valida la prima causa.
+     * @param reason stringa in flash (PSTR), max 11 caratteri
+     */
+    void emergencyStop(PGM_P reason);
 
     bool clearError();
 
     const char *getErrorReason();
 
+    /** Millisecondi trascorsi dall'errore attivo (0 se nessun errore). */
     uint32_t getErrorTimestamp();
 
     bool isInErrorState();
-
-    bool hasCriticalCondition();
 
     bool isAnyEndstopTriggered();
 
@@ -57,12 +61,7 @@ namespace SafetyManager {
     PowerState getPowerState();
 
     /**
-     * @brief Restituisce il nome dello stato di alimentazione
-     */
-    const char *getPowerStateName();
-
-    /**
      * @brief Tempo di inattività in secondi
      */
-    uint16_t getInactiveTime();
+    uint32_t getInactiveTime();
 }

@@ -5,161 +5,225 @@
 #include "../include/SafetyManager.hpp"
 #include "../include/StateMachine.hpp"
 #include "../include/TimeUtils.hpp"
+#include "../include/ParamParser.hpp"
 #include "../include/CompactResponse.hpp"
 
-#define MAX_TEMP_C 280
-#define RUNAWAY_DELTA_C 15
-#define HEATING_TIMEOUT_S 40
-#define MIN_TEMP_RISE_C 4
-#define THERMISTOR_ERROR_C -10
+namespace {
+    constexpr uint8_t FLAG_REACHED = 0x01;    // target raggiunto almeno una volta
+    constexpr uint8_t FLAG_PROTECTION = 0x02; // protezione runaway attiva
+    constexpr uint8_t FLAG_VALID = 0x04;      // almeno una lettura valida
+    constexpr uint16_t UPDATE_INTERVAL_MS = 250;
+
+    bool monitoringEnabled = TEMP_MONITORING_ENABLED;
+    bool sensorFault = false;
+    float targetTemp = 0.0f;
+    float currentTemp = 22.0f;
+
+    uint8_t flags = FLAG_PROTECTION;
+    uint32_t lastUpdate = 0;
+    uint32_t watchStart = 0;
+    float watchTemp = 0.0f;
+
+    void heater(bool on) {
+        digitalWrite(PIN_HEATER, on ? HIGH : LOW);
+    }
+
+    void restartWatch() {
+        watchStart = millis();
+        watchTemp = currentTemp;
+        flags &= ~FLAG_REACHED;
+    }
+
+    /** Equazione Beta. Ritorna false se il sensore e' aperto o in corto. */
+    bool readThermistor(float &out) {
+        const int raw = analogRead(PIN_THERMISTOR);
+        if (raw <= 3 || raw >= 1015) return false;
+
+        const float r = THERMISTOR_PULLUP * (float) raw / (1023.0f - (float) raw);
+        const float invT = (1.0f / 298.15f) + log(r / THERMISTOR_R25) / THERMISTOR_BETA;
+        out = (1.0f / invT) - 273.15f;
+        return true;
+    }
+
+    void sendTemperature() {
+        CompactResponse::begin(PSTR("TMP"), true);
+        CompactResponse::addFloat(currentTemp, 1);
+        CompactResponse::addFloat(targetTemp, 1);
+        CompactResponse::end();
+    }
+}
 
 namespace TempController {
-    bool monitoringEnabled = true;
-    float targetTemp = 0;
-
-    struct ThermalProtection {
-        uint32_t heaterStartTime; // 4 bytes
-        int16_t tempAtStart_x10; // 2 bytes (temperatura * 10)
-        uint16_t timeoutSeconds; // 2 bytes
-        uint8_t flags; // 1 byte: bit0=heaterWasOn, bit1=protectionEnabled
-    };
-
-    static ThermalProtection tp = {0, 0, HEATING_TIMEOUT_S, 0x02}; // protectionEnabled=true
-
     void init() {
         pinMode(PIN_HEATER, OUTPUT);
-        digitalWrite(PIN_HEATER, LOW);
-        tp = {0, 0, HEATING_TIMEOUT_S, 0x02};
+        heater(false);
+        targetTemp = 0.0f;
+        flags = FLAG_PROTECTION;
     }
 
     float getTemperature() {
-        if (!monitoringEnabled) return 22.0f;
-
-        int raw = analogRead(PIN_THERMISTOR);
-        if (raw == 0 || raw == 1023) {
-            if (targetTemp > 0) SafetyManager::emergencyStop("THERMISTOR_ERR");
-            return THERMISTOR_ERROR_C;
-        }
-        return (raw / 1023.0f) * TEMP_MAX;
+        return currentTemp;
     }
 
-    bool checkThermalRunaway() {
-        if (!(tp.flags & 0x02) || !monitoringEnabled) return false;
-        float temp = getTemperature();
-        bool heaterOn = (digitalRead(PIN_HEATER) == HIGH);
-        uint32_t now = millis();
+    float getTargetTemperature() {
+        return targetTemp;
+    }
 
-        if (temp > MAX_TEMP_C) {
-            CompactResponse::sendData("ALM", "MAX_TEMP");
+    void forceOff() {
+        heater(false);
+        targetTemp = 0.0f;
+    }
+
+    bool setTargetTemperature(float temp) {
+        if (temp <= 0.0f) {
+            forceOff();
             return true;
         }
+        if (!monitoringEnabled || sensorFault || temp > TEMP_MAX) return false;
+        if (StateMachine::getState() == MachineState::Error) return false;
 
-        if (targetTemp > 0 && temp > (targetTemp + RUNAWAY_DELTA_C)) {
-            CompactResponse::sendData("ALM", "RUNAWAY");
-            return true;
+        targetTemp = temp;
+        restartWatch();
+        return true; // l'heater viene pilotato da update()
+    }
+
+    bool isStable() {
+        return targetTemp > 0.0f && fabs(currentTemp - targetTemp) < TEMP_HYSTERESIS;
+    }
+
+    bool canExtrude() {
+        return !monitoringEnabled || (!sensorFault && currentTemp >= TEMP_MIN_EXTRUDE);
+    }
+
+    void enableMonitoring(bool enabled) {
+        monitoringEnabled = enabled;
+        if (!enabled) forceOff();
+    }
+
+    void update() {
+        if (!TimeUtils::hasElapsed(lastUpdate, UPDATE_INTERVAL_MS)) return;
+        lastUpdate = millis();
+
+        if (!monitoringEnabled) {
+            heater(false);
+            return;
         }
 
-        if (heaterOn) {
-            if (!(tp.flags & 0x01)) {
-                tp.heaterStartTime = now;
-                tp.tempAtStart_x10 = (int16_t) (temp * 10);
-                tp.flags |= 0x01;
-            } else if (TimeUtils::hasElapsed(tp.heaterStartTime, tp.timeoutSeconds * 1000UL)) {
-                float rise = temp - (tp.tempAtStart_x10 / 10.0f);
-                if (rise < MIN_TEMP_RISE_C) {
-                    CompactResponse::sendData("ALM", "HEAT_TIMEOUT");
-                    return true;
+        float t;
+        if (!readThermistor(t)) {
+            sensorFault = true;
+            heater(false);
+            if (targetTemp > 0.0f) SafetyManager::emergencyStop(PSTR("THERM_ERR"));
+            return;
+        }
+        sensorFault = false;
+
+        // filtro passa-basso leggero contro il rumore dell'ADC
+        if (flags & FLAG_VALID) {
+            currentTemp += (t - currentTemp) * 0.25f;
+        } else {
+            currentTemp = t;
+            flags |= FLAG_VALID;
+        }
+
+        if (currentTemp > TEMP_ABS_MAX) {
+            SafetyManager::emergencyStop(PSTR("MAX_TEMP"));
+            return;
+        }
+
+        if (targetTemp <= 0.0f || StateMachine::getState() == MachineState::Error) {
+            heater(false);
+            return;
+        }
+
+        // --- regolazione on/off con isteresi ---
+        if (currentTemp < targetTemp - TEMP_HYSTERESIS / 2) {
+            heater(true);
+        } else if (currentTemp > targetTemp + TEMP_HYSTERESIS / 2) {
+            heater(false);
+        }
+
+        // --- protezione thermal runaway ---
+        if (!(flags & FLAG_PROTECTION)) return;
+
+        const bool windowElapsed = TimeUtils::hasElapsed(watchStart, THERMAL_WATCH_PERIOD_S * 1000UL);
+
+        if (!(flags & FLAG_REACHED)) {
+            // fase di riscaldamento: deve salire di almeno THERMAL_MIN_RISE_C per finestra
+            if (currentTemp >= targetTemp - TEMP_HYSTERESIS) {
+                flags |= FLAG_REACHED;
+                watchStart = millis();
+            } else if (windowElapsed) {
+                if (currentTemp - watchTemp < THERMAL_MIN_RISE_C) {
+                    SafetyManager::emergencyStop(PSTR("HEAT_FAIL"));
+                    return;
                 }
-                tp.heaterStartTime = now;
-                tp.tempAtStart_x10 = (int16_t) (temp * 10);
+                watchStart = millis();
+                watchTemp = currentTemp;
             }
         } else {
-            tp.flags &= ~0x01;
-        }
-
-        return false;
-    }
-
-    void setTargetTemperature(float temp) {
-        targetTemp = temp;
-        if (StateMachine::getState() == MachineState::Error) return;
-
-        digitalWrite(PIN_HEATER, temp > 0 ? HIGH : LOW);
-        if (temp <= 0) {
-            tp.heaterStartTime = 0;
-            tp.flags &= ~0x01;
+            // a regime: non deve restare sotto il target troppo a lungo
+            if (currentTemp >= targetTemp - THERMAL_RUNAWAY_DELTA_C) {
+                watchStart = millis();
+            } else if (windowElapsed) {
+                SafetyManager::emergencyStop(PSTR("THERM_RUN"));
+            }
         }
     }
 
     void handle(uint8_t code, const char *params) {
         if (StateMachine::getState() == MachineState::Error && code != 0 && code != 20) {
-            CompactResponse::sendNoCommand(CompactResponse::BLOCKED_TEMP_ERROR);
+            CompactResponse::setResult(CompactResponse::BLOCKED_TEMP_ERROR);
             return;
         }
 
         switch (code) {
             case 10: {
-                const char *p = strchr(params, 'T');
-                if (p) {
-                    float temp = atof(p + 1);
-                    setTargetTemperature(temp);
-                    char tempData[16];
-                    snprintf(tempData, sizeof(tempData), "SET_%.1f", temp);
-                    CompactResponse::sendCriticalData("TMP", tempData);
+                float temp;
+                // "S" e' il parametro usato dal driver (M104 S200); "T" quello storico del contratto
+                if (!ParamParser::get(params, 'S', temp) && !ParamParser::get(params, 'T', temp)) {
+                    CompactResponse::reject(PSTR("NO_TEMP"));
+                    break;
                 }
+                if (temp > 0.0f && !monitoringEnabled) {
+                    CompactResponse::reject(PSTR("NO_SENSOR"));
+                    break;
+                }
+                if (!setTargetTemperature(temp)) {
+                    CompactResponse::reject(PSTR("BAD_TEMP"));
+                    break;
+                }
+                sendTemperature();
                 break;
             }
-            case 20: {
-                char tempData[16];
-                snprintf(tempData, sizeof(tempData), "%.1f %.1f", getTemperature(), targetTemp);
-                CompactResponse::sendCriticalData("TMP", tempData);
+            case 20:
+                sendTemperature();
                 break;
-            }
-            case 25: {
-                char protData[8];
-                snprintf(protData, sizeof(protData), "%s", (tp.flags & 0x02) ? "ON" : "OFF");
-                CompactResponse::sendCriticalData("PRT", protData);
+            case 25:
+                CompactResponse::sendCritical(PSTR("PRT"), (flags & FLAG_PROTECTION) ? PSTR("ON") : PSTR("OFF"));
                 break;
-            }
             case 30: {
-                const char *p = strchr(params, 'S');
-                if (p) {
-                    bool enable = atoi(p + 1) != 0;
-                    if (enable) tp.flags |= 0x02;
-                    else tp.flags &= ~0x02;
-
-                    char protData[8];
-                    snprintf(protData, sizeof(protData), "%s", enable ? "ON" : "OFF");
-                    CompactResponse::sendCriticalData("PRT", protData);
+                float v;
+                if (!ParamParser::get(params, 'S', v)) {
+                    CompactResponse::reject(PSTR("NO_PARAM"));
+                    break;
                 }
+                if (v != 0.0f) {
+                    flags |= FLAG_PROTECTION;
+                    restartWatch();
+                } else {
+                    flags &= ~FLAG_PROTECTION;
+                }
+                CompactResponse::sendCritical(PSTR("PRT"), (flags & FLAG_PROTECTION) ? PSTR("ON") : PSTR("OFF"));
                 break;
             }
             case 0:
-                setTargetTemperature(0);
-                CompactResponse::sendData("TMP", "OFF");
+                forceOff();
+                CompactResponse::sendData(PSTR("TMP"), PSTR("OFF"));
                 break;
             default:
-                CompactResponse::sendData("ERR", "UNK_TCODE");
+                CompactResponse::reject(PSTR("UNK_TCODE"));
                 break;
-        }
-    }
-
-    bool isStable() {
-        return fabs(getTemperature() - targetTemp) < TEMP_HYSTERESIS;
-    }
-
-    void enableMonitoring(bool enabled) {
-        monitoringEnabled = enabled;
-    }
-
-    void updateThermalProtection() {
-        static uint32_t lastCheck = 0;
-
-        if (TimeUtils::hasElapsed(lastCheck, 500)) {
-            if (checkThermalRunaway()) {
-                SafetyManager::emergencyStop("THERMAL_RUNAWAY");
-            }
-            lastCheck = millis();
         }
     }
 }

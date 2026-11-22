@@ -1,4 +1,3 @@
-// Application.cpp - Updated to use HAL
 #include "./include/Application.hpp"
 #include "./include/hal/McuHAL.hpp"
 #include "./include/SerialCommandReceiver.hpp"
@@ -17,6 +16,7 @@
 #include "./include/Config.hpp"
 #include "./include/BusyHandler.hpp"
 #include "./include/TimeUtils.hpp"
+#include "./include/CompactResponse.hpp"
 
 namespace {
     bool systemReady = false;
@@ -27,24 +27,17 @@ namespace {
 }
 
 void Application::init() {
-    bootTime = hal::halMillis();
-
-    // Initialize HAL first
+    // HAL per primo: determina la causa del reset appena avvenuto
     hal::init();
 
-    // Initialize serial through HAL
+    bootTime = hal::halMillis();
     hal::serial->begin(115200);
 
+    // Banner riconosciuto dal driver; la riga BOOT ne indica la causa (WDT, BROWNOUT, ...)
     hal::serial->println(F("Avvio firmware 3DP..."));
-    hal::serial->print(F("Platform: "));
-    hal::serial->println(hal::getPlatformName());
-    hal::serial->print(F("Free heap: "));
-    hal::serial->print(hal::getFreeHeap());
-    hal::serial->print(F(" / "));
-    hal::serial->println(hal::getTotalHeap());
+    CompactResponse::sendData(PSTR("BOOT"), SystemController::resetCauseName());
 
     // Initialize core modules
-    WatchdogHandler::enable();
     SafetyManager::init();
     StateMachine::setState(MachineState::Idle);
 
@@ -57,12 +50,7 @@ void Application::init() {
 
     TempController::enableMonitoring(TEMP_MONITORING_ENABLED);
 
-    // Clear watchdog reset flag (platform specific)
-#ifdef __AVR__
-    MCUSR &= ~(1 << WDRF);
-#endif
-    hal::watchdog::disable();
-    hal::watchdog::enable(2000); // Re-enable con timeout di 2 secondi
+    WatchdogHandler::enable();
 
     hal::serial->println(F("Sistema pronto."));
     lastReadyMessage = hal::halMillis();

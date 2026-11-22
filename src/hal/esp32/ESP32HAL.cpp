@@ -115,6 +115,19 @@ namespace hal {
 
     void reset() { esp_restart(); }
 
+    ResetCause getResetCause() {
+        switch (esp_reset_reason()) {
+            case ESP_RST_POWERON: return RESET_POWERON;
+            case ESP_RST_EXT: return RESET_EXTERNAL;
+            case ESP_RST_BROWNOUT: return RESET_BROWNOUT;
+            case ESP_RST_SW: return RESET_SOFT;
+            case ESP_RST_INT_WDT:
+            case ESP_RST_TASK_WDT:
+            case ESP_RST_WDT: return RESET_WATCHDOG;
+            default: return RESET_UNKNOWN;
+        }
+    }
+
     const char *getPlatformName() { return "ESP32"; }
 
     uint32_t getFreeHeap() { return ESP.getFreeHeap(); }

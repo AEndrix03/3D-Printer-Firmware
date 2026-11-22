@@ -24,10 +24,4 @@ namespace StateMachine {
      * @return Stato macchina corrente
      */
     MachineState getState();
-
-    /**
-     * @brief Restituisce il nome dello stato come stringa.
-     * @return Es. "Idle", "Printing", ...
-     */
-    const char *getStateName();
 }

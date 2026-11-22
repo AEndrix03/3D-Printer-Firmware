@@ -93,7 +93,21 @@ namespace hal {
     // ===== System =====
     void init();
 
+    /// Riavvia il microcontrollore in modo pulito (causa registrata come SOFT).
     void reset();
+
+    // ===== Reset cause =====
+    enum ResetCause : uint8_t {
+        RESET_UNKNOWN = 0,
+        RESET_POWERON,
+        RESET_EXTERNAL,
+        RESET_BROWNOUT,
+        RESET_WATCHDOG,
+        RESET_SOFT
+    };
+
+    /// Causa dell'ultimo reset, determinata all'avvio (valida dopo hal::init()).
+    ResetCause getResetCause();
 
     // ===== Platform specific =====
     const char *getPlatformName();

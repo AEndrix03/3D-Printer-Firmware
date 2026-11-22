@@ -4,6 +4,49 @@
 #include "../../include/hal/McuHAL.hpp"
 #include <Arduino.h>
 #include <avr/wdt.h>
+#include <avr/interrupt.h>
+#include "../../include/Pins.hpp"
+
+// ---------------------------------------------------------------------------
+// Reset cause tracking.
+// MCUSR va letto prima possibile; alcuni bootloader (Optiboot dell'Uno) lo
+// azzerano, quindi il watchdog viene anche tracciato tramite un marker in
+// .noinit scritto dall'interrupt del watchdog stesso (la RAM sopravvive al
+// reset, non al power cycle).
+// ---------------------------------------------------------------------------
+namespace {
+    constexpr uint16_t BOOT_MAGIC = 0x3D9A;
+
+    struct BootInfo {
+        uint16_t magic;
+        uint8_t cause;
+    };
+
+    BootInfo bootInfo __attribute__((section(".noinit")));
+    uint8_t mcusrMirror __attribute__((section(".noinit")));
+    hal::ResetCause resetCause = hal::RESET_UNKNOWN;
+}
+
+extern int __heap_start;
+extern int *__brkval;
+
+void captureResetFlags() __attribute__((naked, used, section(".init3")));
+
+void captureResetFlags() {
+    mcusrMirror = MCUSR;
+    MCUSR = 0;
+    wdt_disable();
+}
+
+// Il watchdog lavora in modalita' interrupt+reset: prima di resettare spegne
+// l'heater e registra la causa, poi forza il reset entro 15 ms.
+ISR(WDT_vect) {
+    digitalWrite(PIN_HEATER, LOW);
+    bootInfo.magic = BOOT_MAGIC;
+    bootInfo.cause = hal::RESET_WATCHDOG;
+    wdt_enable(WDTO_15MS);
+    for (;;) {}
+}
 
 namespace hal {
 
@@ -11,7 +54,6 @@ namespace hal {
     public:
         void begin(uint32_t baud) override {
             ::Serial.begin(baud);
-            while (!::Serial);
         }
 
         void end() override { ::Serial.end(); }
@@ -70,17 +112,51 @@ namespace hal {
             else wdt_val = WDTO_8S;
 
             wdt_enable(wdt_val);
+            WDTCSR |= _BV(WDIE); // interrupt + reset: vedi ISR(WDT_vect)
         }
 
         void disable() { wdt_disable(); }
         void reset() { wdt_reset(); }
     }
 
-    void init() {}
-    void reset() { asm volatile ("jmp 0"); }
+    void init() {
+        const bool ramSurvived = (bootInfo.magic == BOOT_MAGIC);
+
+        if (ramSurvived && (bootInfo.cause == RESET_WATCHDOG || bootInfo.cause == RESET_SOFT)) {
+            resetCause = (ResetCause) bootInfo.cause;
+        } else if (mcusrMirror & _BV(WDRF)) {
+            resetCause = RESET_WATCHDOG;
+        } else if (mcusrMirror & _BV(PORF)) {
+            resetCause = RESET_POWERON;
+        } else if (mcusrMirror & _BV(BORF)) {
+            resetCause = RESET_BROWNOUT;
+        } else if (mcusrMirror & _BV(EXTRF)) {
+            resetCause = RESET_EXTERNAL;
+        } else {
+            // MCUSR azzerato dal bootloader: RAM intatta = reset a caldo (pin RESET / DTR)
+            resetCause = ramSurvived ? RESET_EXTERNAL : RESET_POWERON;
+        }
+
+        bootInfo.magic = BOOT_MAGIC;
+        bootInfo.cause = RESET_UNKNOWN;
+    }
+
+    void reset() {
+        ::Serial.flush();
+        cli();
+        bootInfo.magic = BOOT_MAGIC;
+        bootInfo.cause = RESET_SOFT;
+        wdt_enable(WDTO_15MS); // senza WDIE: reset hardware pulito di tutte le periferiche
+        for (;;) {}
+    }
+
+    ResetCause getResetCause() { return resetCause; }
+
     const char *getPlatformName() { return "Arduino AVR"; }
+
     uint32_t getFreeHeap() {
-        return -1; //TODO:
+        int v;
+        return (uint32_t) ((int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval));
     }
     uint32_t getTotalHeap() { return 2048; }
 }

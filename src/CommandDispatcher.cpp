@@ -29,7 +29,7 @@ void CommandDispatcher::dispatch(const ParsedCommand &cmd) {
             EndstopController::handle(cmd.code, cmd.params);
             break;
         default:
-            CompactResponse::send(CompactResponse::INVALID_CATEGORY_ERROR, cmd.number);
+            CompactResponse::setResult(CompactResponse::INVALID_CATEGORY_ERROR);
             break;
     }
 }

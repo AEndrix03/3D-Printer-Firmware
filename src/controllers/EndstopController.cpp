@@ -11,13 +11,16 @@ namespace EndstopController {
         pinMode(PIN_ENDSTOP_Z, INPUT_PULLUP);
     }
 
-    void handle(uint8_t code, const char *params) {
-        if (code == 10) {
-            char endstopData[16];
-            snprintf(endstopData, sizeof(endstopData), "%d %d %d",
-                     isTriggeredX(), isTriggeredY(), isTriggeredZ());
-            CompactResponse::sendCriticalData("END", endstopData);
+    void handle(uint8_t code, const char *) {
+        if (code != 10) {
+            CompactResponse::reject(PSTR("UNK_ECODE"));
+            return;
         }
+        CompactResponse::begin(PSTR("END"), true);
+        CompactResponse::addInt(isTriggeredX());
+        CompactResponse::addInt(isTriggeredY());
+        CompactResponse::addInt(isTriggeredZ());
+        CompactResponse::end();
     }
 
     bool isTriggeredX() {

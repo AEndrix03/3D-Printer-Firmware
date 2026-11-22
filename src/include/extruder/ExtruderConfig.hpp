@@ -5,4 +5,6 @@ namespace ExtruderConfig {
 
     constexpr float MAX_FEEDRATE_E = 2000.0f; // mm/min
     constexpr float MIN_FEEDRATE_E = 100.0f;
+
+    constexpr float MANUAL_STEP_FEEDRATE = 300.0f; // mm/min, usato da A13
 }

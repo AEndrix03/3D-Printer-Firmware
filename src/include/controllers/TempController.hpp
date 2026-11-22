@@ -1,9 +1,15 @@
-// TempController.hpp - Enhanced with Thermal Protection
+// TempController.hpp - Hotend: lettura, regolazione e protezioni termiche
 
 #pragma once
 
+#include <stdint.h>
+
 /**
  * @brief Gestisce la lettura della temperatura e il controllo termico con protezioni.
+ *
+ * La regolazione e' on/off con isteresi ed e' eseguita da update(), chiamato
+ * da SafetyManager::update() (quindi anche durante i movimenti bloccanti).
+ * Senza sensore (TEMP_MONITORING_ENABLED = false) il riscaldamento e' rifiutato.
  */
 namespace TempController {
     /**
@@ -12,33 +18,40 @@ namespace TempController {
     void init();
 
     /**
-     * @brief Esegue un comando termico con protezioni integrate.
+     * @brief Esegue un comando termico.
      * @param code Codice del comando:
-     *  - 10: SET temperature (T10 T200)
-     *  - 20: GET temperature  
+     *  - 10: SET temperature (T10 S200)
+     *  - 20: GET temperature  -> "CRT TMP <attuale> <target>"
      *  - 25: Thermal protection status
-     *  - 30: Enable/disable protection (T30 S1/S0)
-     *  - 0:  Emergency stop
+     *  - 30: Enable/disable runaway protection (T30 S1/S0)
+     *  - 0:  Heater off
      * @param params Parametri del comando
      */
     void handle(uint8_t code, const char *params);
 
     /**
-     * @brief Restituisce la temperatura attuale (°C).
+     * @brief Ultima temperatura letta (°C). Non accede all'ADC.
      */
     float getTemperature();
 
+    float getTargetTemperature();
+
     /**
-     * @brief Imposta una nuova temperatura target con controlli di sicurezza.
-     * @param temp Valore in gradi Celsius
+     * @brief Imposta una nuova temperatura target.
+     * @return false se il target e' fuori range o il sensore non e' disponibile
      */
-    void setTargetTemperature(float temp);
+    bool setTargetTemperature(float temp);
+
+    /** Spegne subito l'heater e azzera il target (uso: emergenze). */
+    void forceOff();
 
     /**
      * @brief Verifica se la temperatura è stabile attorno al target.
-     * @return true se stabile entro un margine ±X °C
      */
     bool isStable();
+
+    /** true se l'estrusione e' permessa (sensore assente = nessun vincolo). */
+    bool canExtrude();
 
     /**
      * @brief Abilita o disabilita il controllo della temperatura
@@ -46,13 +59,7 @@ namespace TempController {
     void enableMonitoring(bool enabled);
 
     /**
-     * @brief Controlla thermal runaway e protezioni. Da chiamare nel SafetyManager::update()
+     * @brief Lettura sensore, regolazione e protezioni. Si auto-limita a 4 Hz.
      */
-    void updateThermalProtection();
-
-    /**
-     * @brief Verifica condizioni di thermal runaway
-     * @return true se rilevato thermal runaway
-     */
-    bool checkThermalRunaway();
+    void update();
 }

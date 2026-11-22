@@ -14,21 +14,4 @@ namespace StateMachine {
         return current;
     }
 
-    const char *getStateName() {
-        switch (current) {
-            case MachineState::Idle:
-                return "Idle";
-            case MachineState::Homing:
-                return "Homing";
-            case MachineState::Printing:
-                return "Printing";
-            case MachineState::Paused:
-                return "Paused";
-            case MachineState::Error:
-                return "Error";
-            default:
-                return "Unknown";
-        }
-    }
-
 }

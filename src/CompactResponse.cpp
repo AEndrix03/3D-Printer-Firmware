@@ -6,120 +6,169 @@
 #include "./include/hal/McuHAL.hpp"
 
 namespace {
-    // Calcola checksum senza strlen per evitare doppio attraversamento
-    uint8_t computeChecksum(const char *str) {
+    constexpr uint8_t ACK_MAX_ATTEMPTS = 3;
+    constexpr uint16_t ACK_TIMEOUT_MS = 400; // 3 x 400 ms: sempre sotto il watchdog, che viene comunque alimentato
+
+    char txBuf[48];
+    uint8_t txLen = 0;
+    bool txCritical = false;
+    uint8_t ackFailures = 0;
+    CompactResponse::ResponseCode pendingResult = CompactResponse::OK;
+
+    const char RESPONSE_CODES[] PROGMEM = "OK0E01E02E03E04E05E06EM0ET0ES0ES1";
+
+    void put(char c) {
+        if (txLen < sizeof(txBuf) - 1) txBuf[txLen++] = c;
+    }
+
+    void putStr(const char *s) {
+        while (*s) put(*s++);
+    }
+
+    void putStr_P(PGM_P s) {
+        char c;
+        while ((c = (char) pgm_read_byte(s++)) != 0) put(c);
+    }
+
+    uint8_t checksum() {
         uint8_t cs = 0;
-        for (const char *p = str; *p; ++p) {
-            cs ^= (uint8_t) *p;
-        }
+        for (uint8_t i = 0; i < txLen; ++i) cs ^= (uint8_t) txBuf[i];
         return cs;
+    }
+
+    void transmit(uint8_t cs) {
+        hal::serial->write((const uint8_t *) txBuf, txLen);
+        hal::serial->print(F(" *"));
+        hal::serial->println((int) cs);
+    }
+
+    /**
+     * Attende "A<checksum a 3 cifre>". Ritorna true solo se l'ACK corrisponde.
+     * Un ACK con checksum diverso significa che l'host ha ricevuto il messaggio
+     * corrotto: si ritrasmette subito.
+     */
+    bool waitForAck(uint8_t cs) {
+        const uint32_t start = hal::halMillis();
+        uint8_t digits = 0xFF; // 0xFF = in attesa della 'A'
+        uint8_t value = 0;
+
+        while (hal::halMillis() - start < ACK_TIMEOUT_MS) {
+            hal::watchdog::reset();
+            while (hal::serial->available()) {
+                const char c = (char) hal::serial->read();
+                if (c == 'A') {
+                    digits = 0;
+                    value = 0;
+                } else if (digits != 0xFF && c >= '0' && c <= '9') {
+                    value = (uint8_t) (value * 10 + (c - '0'));
+                    if (++digits == 3) return value == cs;
+                } else {
+                    digits = 0xFF;
+                }
+            }
+        }
+        return false;
     }
 }
 
 namespace CompactResponse {
     void send(ResponseCode code, uint32_t cmdNumber) {
-        char buffer[24];
+        txLen = 0;
+        for (uint8_t i = 0; i < 3; ++i) {
+            put((char) pgm_read_byte(RESPONSE_CODES + (uint8_t) code * 3 + i));
+        }
+        put(' ');
+        put('N');
+        char num[11];
+        ultoa(cmdNumber, num, 10);
+        putStr(num);
+        transmit(checksum());
+    }
 
-        switch (code) {
-            case OK:
-                snprintf_P(buffer, sizeof(buffer), PSTR("OK0 N%lu"), cmdNumber);
-                break;
-            case CHECKSUM_ERROR:
-                snprintf_P(buffer, sizeof(buffer), PSTR("E01 N%lu"), cmdNumber);
-                break;
-            case BUFFER_OVERFLOW_ERROR:
-                snprintf_P(buffer, sizeof(buffer), PSTR("E02 N%lu"), cmdNumber);
-                break;
-            case DUPLICATE_COMMAND_ERROR:
-                snprintf_P(buffer, sizeof(buffer), PSTR("E03 N%lu"), cmdNumber);
-                break;
-            case RESEND_COMMAND_ERROR:
-                snprintf_P(buffer, sizeof(buffer), PSTR("E04 N%lu"), cmdNumber);
-                break;
-            case INVALID_CATEGORY_ERROR:
-                snprintf_P(buffer, sizeof(buffer), PSTR("E05 N%lu"), cmdNumber);
-                break;
-            case BLOCKED_MOTION_ERROR:
-                snprintf_P(buffer, sizeof(buffer), PSTR("EM0 N%lu"), cmdNumber);
-                break;
-            case BLOCKED_TEMP_ERROR:
-                snprintf_P(buffer, sizeof(buffer), PSTR("ET0 N%lu"), cmdNumber);
-                break;
-            case CANCELLED_ERROR:
-                snprintf_P(buffer, sizeof(buffer), PSTR("ES0 N%lu"), cmdNumber);
-                break;
-            case NO_ERROR:
-                snprintf_P(buffer, sizeof(buffer), PSTR("ES1 N%lu"), cmdNumber);
-                break;
+    void setResult(ResponseCode code) {
+        pendingResult = code;
+    }
+
+    ResponseCode takeResult() {
+        const ResponseCode r = pendingResult;
+        pendingResult = OK;
+        return r;
+    }
+
+    void begin(PGM_P type, bool critical) {
+        txLen = 0;
+        txCritical = critical;
+        if (critical) putStr_P(PSTR("CRT "));
+        putStr_P(type);
+    }
+
+    void addP(PGM_P text) {
+        put(' ');
+        putStr_P(text);
+    }
+
+    void addStr(const char *text) {
+        put(' ');
+        putStr(text);
+    }
+
+    void addInt(int32_t value) {
+        char num[12];
+        ltoa(value, num, 10);
+        addStr(num);
+    }
+
+    void addFloat(float value, uint8_t decimals) {
+        // avr-libc non supporta %f in printf: si usa dtostrf
+        if (isnan(value)) value = 0.0f;
+        if (value > 999999.0f) value = 999999.0f;
+        if (value < -999999.0f) value = -999999.0f;
+        char num[16];
+        dtostrf(value, 0, decimals, num);
+        addStr(num);
+    }
+
+    void end() {
+        const uint8_t cs = checksum();
+
+        if (!txCritical) {
+            transmit(cs);
+            return;
         }
 
-        uint8_t checksum = computeChecksum(buffer);
-        hal::serial->print(buffer);
-        hal::serial->print(F(" *"));
-        hal::serial->println(checksum);
-    }
+        for (uint8_t attempt = 0; attempt < ACK_MAX_ATTEMPTS; ++attempt) {
+            // Scarta eventuali byte vecchi: il protocollo e' stop-and-wait,
+            // qui l'host non puo' avere comandi validi in volo.
+            while (hal::serial->available()) hal::serial->read();
 
-    void sendNoCommand(ResponseCode code) {
-        send(code, 0);
-    }
-
-    void sendData(const char *dataType, const char *payload) {
-        char buffer[64];
-        snprintf(buffer, sizeof(buffer), "%s %s", dataType, payload);
-
-        uint8_t checksum = computeChecksum(buffer);
-        hal::serial->print(buffer);
-        hal::serial->print(F(" *"));
-        hal::serial->println(checksum);
-    }
-
-    void sendCriticalData(const char *dataType, const char *payload, uint8_t maxRetries) {
-        char buffer[64];
-        snprintf(buffer, sizeof(buffer), "CRT %s %s", dataType, payload);
-
-        uint8_t checksum = computeChecksum(buffer);
-        uint8_t attempts = 0;
-
-        while (attempts < maxRetries || maxRetries == 0) {
-            hal::serial->print(buffer);
-            hal::serial->print(F(" *"));
-            hal::serial->println(checksum);
-
+            transmit(cs);
             hal::serial->flush();
 
-            // Pulisci il buffer seriale in entrata
-            while (hal::serial->available()) {
-                hal::serial->read();
-            }
-
-            uint32_t start = hal::halMillis();
-            while (hal::halMillis() - start < 2000) { // 2s timeout
-                if (hal::serial->available() >= 4) {
-                    // Leggi e valida ACK senza array temporaneo
-                    if (hal::serial->read() == 'A') {
-                        uint8_t ackChecksum = 0;
-                        for (uint8_t i = 0; i < 3; i++) {
-                            char digit = hal::serial->read();
-                            if (digit >= '0' && digit <= '9') {
-                                ackChecksum = ackChecksum * 10 + (digit - '0');
-                            } else {
-                                goto retry; // ACK malformato
-                            }
-                        }
-
-                        if (ackChecksum == checksum) {
-                            return; // Success!
-                        }
-                    }
-                    break; // Wrong ACK, retry
-                }
-
-                // Aggiungi un piccolo delay per non saturare la CPU
-                hal::halDelay(10);
-            }
-            retry:
-            attempts++;
+            if (waitForAck(cs)) return;
         }
-        // Max retries reached - continue anyway
+
+        // Host non raggiungibile: si prosegue, ma l'evento resta diagnosticabile (S11)
+        if (ackFailures < 255) ackFailures++;
+    }
+
+    void sendData(PGM_P type, PGM_P payload) {
+        begin(type);
+        addP(payload);
+        end();
+    }
+
+    void sendCritical(PGM_P type, PGM_P payload) {
+        begin(type, true);
+        addP(payload);
+        end();
+    }
+
+    void reject(PGM_P reason) {
+        sendData(PSTR("ERR"), reason);
+        setResult(REJECTED_ERROR);
+    }
+
+    uint8_t getAckFailures() {
+        return ackFailures;
     }
 }

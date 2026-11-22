@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Arduino.h>
+
 /**
  * @brief Espone comandi di sistema generici (status, reset, info).
  */
@@ -54,4 +56,17 @@ namespace SystemController {
      * @brief S8 - Mostra stato power management
      */
     void printPowerStatus();
+
+    /**
+     * @brief S11 - Diagnostica long-running: uptime, causa ultimo reset, contatori errori, RAM libera
+     */
+    void printDiagnostics();
+
+    /**
+     * @brief S12 - Termina la stampa: Printing/Paused -> Idle
+     */
+    void endPrint();
+
+    /** Nome (in flash) della causa ultimo reset. */
+    PGM_P resetCauseName();
 }

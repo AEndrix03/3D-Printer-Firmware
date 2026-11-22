@@ -9,157 +9,109 @@
 #include "./include/hal/McuHAL.hpp"
 
 uint32_t SerialCommandReceiver::lastCommandNumber = 0;
+uint8_t SerialCommandReceiver::checksumErrors = 0;
+uint8_t SerialCommandReceiver::overflowErrors = 0;
 
 namespace {
-    char inputBuffer[48];
+    // 64 = dimensione del buffer RX hardware dell'Uno: una riga piu' lunga non
+    // potrebbe comunque arrivare integra mentre il firmware e' occupato.
+    char inputBuffer[64];
     uint8_t bufferIndex = 0;
-    bool firstCommandReceived = false;
+    bool lineOverflow = false;
 
-    // Contatori per gestire errori ripetuti
-    uint8_t consecutiveErrors = 0;
-    uint32_t lastErrorTime = 0;
-    constexpr uint8_t MAX_CONSECUTIVE_ERRORS = 10;
-    constexpr uint32_t ERROR_RESET_INTERVAL = 5000; // 5 secondi
+    void bump(uint8_t &counter) {
+        if (counter < 255) counter++;
+    }
 
-    uint8_t computeChecksum(const char *str) {
+    void processLine() {
+        using namespace SerialCommandReceiver;
+
+        // ACK fuori tempo ("A123"): non e' un comando
+        if (inputBuffer[0] == 'A' && isdigit(inputBuffer[1])) return;
+
+        // Abort ricevuto a macchina ferma: niente da interrompere
+        if (inputBuffer[0] == '!') return;
+
+        // --- checksum: obbligatorio, calcolato su tutto cio' che precede " *" ---
+        char *star = strrchr(inputBuffer, '*');
+        uint8_t len = star ? (uint8_t) (star - inputBuffer) : 0;
+        while (len > 0 && inputBuffer[len - 1] == ' ') --len;
+
         uint8_t cs = 0;
-        const char *p = strchr(str, '*');
-        size_t len = p ? (size_t) (p - str) : strlen(str);
+        for (uint8_t i = 0; i < len; ++i) cs ^= (uint8_t) inputBuffer[i];
 
-        while (len > 0 && str[len - 1] == ' ') --len;
-        for (size_t i = 0; i < len; ++i) {
-            cs ^= (uint8_t) str[i];
+        if (!star || len == 0 || inputBuffer[0] != 'N' || !isdigit(star[1]) || cs != (uint8_t) atoi(star + 1)) {
+            bump(checksumErrors);
+            CompactResponse::send(CompactResponse::CHECKSUM_ERROR, lastCommandNumber + 1);
+            return;
         }
-        return cs;
-    }
+        inputBuffer[len] = '\0'; // i parametri non includono piu' la coda " *cs"
 
-    uint32_t extractNumber(const char *line) {
-        return (line[0] == 'N') ? atol(line + 1) : 0;
-    }
+        // --- parsing "N<num> <cat><code> [params]" ---
+        ParsedCommand cmd{};
+        cmd.number = strtoul(inputBuffer + 1, nullptr, 10);
+        cmd.checksum = cs;
+        cmd.valid = true;
+        cmd.params = "";
 
-    char extractCategory(const char *line) {
-        const char *p = strchr(line, ' ');
-        return (p && *(p + 1)) ? *(p + 1) : '\0';
-    }
-
-    uint8_t extractCode(const char *line) {
-        const char *p = strchr(line, ' ');
-        return (p && *(p + 2)) ? atoi(p + 2) : 0;
-    }
-
-    const char *extractParams(const char *line) {
-        const char *p = strchr(line, ' ');
-        if (!p) return "";
-        p = strchr(p + 1, ' ');
-        return p ? (p + 1) : "";
-    }
-
-    uint8_t extractProvidedChecksum(const char *line) {
-        const char *p = strchr(line, '*');
-        return p ? atoi(p + 1) : 0;
-    }
-
-    bool isNextExpected(uint32_t received, uint32_t last) {
-        return received == (last + 1);
-    }
-
-    bool isDuplicate(uint32_t received, uint32_t last) {
-        return received == last;
-    }
-
-    void resetBuffer() {
-        bufferIndex = 0;
-        inputBuffer[0] = '\0';
-    }
-
-    bool addCharToBuffer(char c) {
-        if (bufferIndex >= sizeof(inputBuffer) - 1) {
-            CompactResponse::sendNoCommand(CompactResponse::BUFFER_OVERFLOW_ERROR);
-            resetBuffer();
-            return false;
+        const char *p = strchr(inputBuffer, ' ');
+        if (p && p[1]) {
+            cmd.category = p[1];
+            cmd.code = (uint8_t) atoi(p + 2);
+            const char *q = strchr(p + 1, ' ');
+            if (q) cmd.params = q + 1;
         }
-        inputBuffer[bufferIndex++] = c;
-        return true;
-    }
 
-    void handleError() {
-        consecutiveErrors++;
-        lastErrorTime = hal::halMillis();
+        Application::notifyCommandReceived();
 
-        // Se ci sono troppi errori consecutivi, forza il flag systemReady
-        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-            if (!firstCommandReceived) {
-                firstCommandReceived = true;
-                Application::notifyCommandReceived();
-            }
-            consecutiveErrors = 0; // Reset contatore
+        // --- sequenza ---
+        if (cmd.number == 0) {
+            lastCommandNumber = 0; // resync esplicito richiesto dall'host
+        } else if (cmd.number == lastCommandNumber) {
+            CompactResponse::send(CompactResponse::DUPLICATE_COMMAND_ERROR, cmd.number);
+            return;
+        } else if (cmd.number != lastCommandNumber + 1) {
+            CompactResponse::send(CompactResponse::RESEND_COMMAND_ERROR, lastCommandNumber + 1);
+            return;
+        } else {
+            lastCommandNumber = cmd.number;
         }
-    }
 
-    void resetErrorCounter() {
-        // Reset del contatore errori se è passato abbastanza tempo
-        if (consecutiveErrors > 0 &&
-            hal::halMillis() - lastErrorTime > ERROR_RESET_INTERVAL) {
-            consecutiveErrors = 0;
-        }
+        // --- esecuzione: esattamente una risposta terminale ---
+        CompactResponse::takeResult();
+        SafetyManager::notifyCommandReceived();
+        BusyHandler::start();
+        CommandDispatcher::dispatch(cmd);
+        BusyHandler::stop();
+        SafetyManager::notifyCommandReceived(); // l'inattivita' si misura dalla fine del comando
+        CompactResponse::send(CompactResponse::takeResult(), cmd.number);
     }
 }
 
 void SerialCommandReceiver::update() {
-    resetErrorCounter();
-
     while (hal::serial->available()) {
-        char c = hal::serial->read();
+        const char c = (char) hal::serial->read();
 
         if (c == '\n' || c == '\r') {
-            if (bufferIndex == 0) continue;
-            inputBuffer[bufferIndex] = '\0';
-
-            // Skip ACK messages
-            if (inputBuffer[0] == 'A' && isdigit(inputBuffer[1])) {
-                resetBuffer();
+            if (lineOverflow) {
+                // riga troppo lunga: scartata per intero, una sola segnalazione
+                lineOverflow = false;
+                bufferIndex = 0;
+                bump(overflowErrors);
+                CompactResponse::send(CompactResponse::BUFFER_OVERFLOW_ERROR, lastCommandNumber + 1);
                 continue;
             }
+            if (bufferIndex == 0) continue;
 
-            ParsedCommand cmd{};
-            cmd.number = extractNumber(inputBuffer);
-            cmd.category = extractCategory(inputBuffer);
-            cmd.code = extractCode(inputBuffer);
-            cmd.params = extractParams(inputBuffer);
-            cmd.checksum = computeChecksum(inputBuffer);
-            cmd.valid = (cmd.checksum == extractProvidedChecksum(inputBuffer));
-
-            if (cmd.valid) {
-                // Reset contatore errori su comando valido
-                consecutiveErrors = 0;
-
-                if (!firstCommandReceived) {
-                    firstCommandReceived = true;
-                    Application::notifyCommandReceived();
-                }
-
-                if (isDuplicate(cmd.number, lastCommandNumber)) {
-                    CompactResponse::send(CompactResponse::DUPLICATE_COMMAND_ERROR, cmd.number);
-                } else if (!isNextExpected(cmd.number, lastCommandNumber)) {
-                    uint32_t expected = lastCommandNumber + 1;
-                    CompactResponse::send(CompactResponse::RESEND_COMMAND_ERROR, expected);
-                } else {
-                    lastCommandNumber = cmd.number;
-                    SafetyManager::notifyCommandReceived();
-                    BusyHandler::start();
-                    CommandDispatcher::dispatch(cmd);
-                    BusyHandler::stop();
-                    CompactResponse::send(CompactResponse::OK, cmd.number);
-                }
-            } else {
-                handleError();
-                CompactResponse::send(CompactResponse::CHECKSUM_ERROR, cmd.number);
-            }
-
-            resetBuffer();
-        } else if (!addCharToBuffer(c)) {
-            handleError();
-            // Buffer overflow handled in addCharToBuffer
+            inputBuffer[bufferIndex] = '\0';
+            bufferIndex = 0;
+            processLine();
+        } else if (lineOverflow) {
+            // continua a scartare fino al fine riga
+        } else if (bufferIndex >= sizeof(inputBuffer) - 1) {
+            lineOverflow = true;
+        } else {
+            inputBuffer[bufferIndex++] = c;
         }
     }
 }
