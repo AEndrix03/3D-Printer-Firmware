@@ -60,6 +60,12 @@ namespace sim {
 
     std::vector<uint16_t> intervals();
 
+    /// Finecorsa simulato sull'asse (0=X, 1=Y, 2=Z): scatta quando la posizione in step
+    /// scende a `atSteps` o sotto. Senza chiamare questa funzione non scatta mai.
+    void setEndstop(int axis, long atSteps);
+
+    void clearEndstops();
+
     bool pinLevel(uint8_t pin);
 
     void setAnalog(uint8_t pin, int value);

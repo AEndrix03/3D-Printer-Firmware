@@ -83,6 +83,10 @@ namespace {
         return INVERTED[axis] ? -rawSteps[axis] : rawSteps[axis];
     }
 
+    const uint8_t ENDSTOP_PINS[3] = {PIN_ENDSTOP_X, PIN_ENDSTOP_Y, PIN_ENDSTOP_Z};
+    bool endstopActive[3] = {false, false, false};
+    long endstopAt[3] = {0, 0, 0};
+
     // ---- controllo del firmware ----
     std::thread firmwareThread;
     std::atomic<bool> running{false};
@@ -266,6 +270,10 @@ void digitalWrite(uint8_t pin, uint8_t value) {
 
 int digitalRead(uint8_t pin) {
     std::lock_guard<std::mutex> lock(pinMutex);
+    for (int axis = 0; axis < 3; ++axis) {
+        // finecorsa NC (ENDSTOP_INVERTED): livello alto = premuto
+        if (pin == ENDSTOP_PINS[axis]) return endstopActive[axis] && logicalSteps(axis) <= endstopAt[axis];
+    }
     return pins[pin] ? HIGH : LOW;
 }
 
@@ -491,6 +499,17 @@ namespace sim {
     std::vector<uint16_t> intervals() {
         std::lock_guard<std::mutex> lock(pinMutex);
         return recordedIntervals;
+    }
+
+    void setEndstop(int axis, long atSteps) {
+        std::lock_guard<std::mutex> lock(pinMutex);
+        endstopActive[axis] = true;
+        endstopAt[axis] = atSteps;
+    }
+
+    void clearEndstops() {
+        std::lock_guard<std::mutex> lock(pinMutex);
+        for (bool &active: endstopActive) active = false;
     }
 
     bool pinLevel(uint8_t pin) {

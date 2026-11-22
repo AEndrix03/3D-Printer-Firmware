@@ -17,8 +17,10 @@ N124 M11 X100.5 Y200.3 E0.4213 F3000 *87
 - **`N0` e' il comando di sincronizzazione**: viene sempre accettato e riporta la
   sequenza a zero (il successivo e' `N1`). Il driver lo usa come handshake dopo
   un timeout o un riavvio del firmware (`N0 S10`).
-- La riga `!` (o il carattere `!` durante un movimento) interrompe il movimento
-  in corso: il comando interrotto risponde `E06` con `ERR ABORTED`.
+- Il carattere `!` e' un comando in tempo reale, valido in qualsiasi momento:
+  arresto controllato. La macchina decelera lungo il percorso, i movimenti in coda
+  vengono scartati e la posizione resta esatta. Un comando che stava aspettando
+  risponde `E06` con `ERR ABORTED`.
 
 ## Risposta terminale (firmware -> host)
 
@@ -26,7 +28,7 @@ N124 M11 X100.5 Y200.3 E0.4213 F3000 *87
 
 | Codice | Significato |
 |--------|-------------|
-| `OK0 N<n>` | eseguito |
+| `OK0 N<n> D<d>` | accettato. `d` = ultimo comando la cui esecuzione e' terminata |
 | `E01 N<atteso>` | checksum errato o riga non valida: ritrasmettere |
 | `E02 N<atteso>` | riga troppo lunga, scartata |
 | `E03 N<n>` | duplicato: il comando `n` era gia' stato eseguito (risposta persa) |
@@ -35,6 +37,26 @@ N124 M11 X100.5 Y200.3 E0.4213 F3000 *87
 | `E06 N<n>` | comando rifiutato; il motivo e' nella riga `ERR <motivo>` che precede |
 | `EM0 N<n>` / `ET0 N<n>` | macchina in stato di errore: movimento / riscaldamento bloccati |
 | `ES0 N<n>` / `ES1 N<n>` | `S6`: errore azzerato / nessun errore attivo |
+
+## Movimenti in coda
+
+I comandi di movimento (`M10`, `M11`, `A10`-`A13`) **non aspettano la fine del
+movimento**: rispondono `OK` appena il segmento e' nella coda del planner (7 posti)
+oppure, a coda piena, appena se ne libera uno. Mentre la macchina si muove l'host
+invia gia' i segmenti successivi e il planner li raccorda senza fermate (lookahead
+con junction deviation); gli step sono generati in interrupt di timer.
+
+Conseguenze per l'host:
+
+- `OK0 N<n> D<d>`: `d` e' il numero dell'ultimo comando completamente eseguito
+  (uguale a `n` quando la macchina e' ferma). Per sapere "a che punto e' davvero"
+  si guarda `D`, non l'ultimo `OK`.
+- Aspettano la fine dei movimenti prima di rispondere: `M12`, `M99`, `S0`, `S2`,
+  `S12`, `A14`, `A15`. Tutti gli altri (temperatura, ventola, stato, `M114`) vengono
+  eseguiti subito.
+- Un errore durante un movimento gia' accodato (finecorsa, allarme termico) non puo'
+  piu' essere riportato sul suo comando: la macchina va in stato di errore
+  (`ALM <motivo>`) e il comando successivo riceve `EM0`.
 
 ## Dati (firmware -> host)
 
@@ -69,17 +91,27 @@ Vedi `contracts/*.json`. In sintesi:
 | `M10 X Y Z E F` | movimento relativo (mm, mm/min) |
 | `M11 X Y Z E F` | movimento assoluto; assi omessi invariati; `E` sempre relativo |
 | `M12 X Y Z` | dichiara la posizione corrente |
-| `M114` | posizione -> `CRT POS x y z` |
+| `M114` | posizione reale in questo istante -> `CRT POS x y z <r>`; `r`=1 se riferita (homing o `M12` dall'accensione) |
 | `M0` | emergency stop |
 | `A10/A11/A12 E F` | estrusione / ritrazione / spurgo |
 | `T10 S<gradi>` | target hotend (rifiutato con `NO_SENSOR` se il termistore e' disabilitato) |
 | `T20` | temperatura -> `CRT TMP <attuale> <target>` |
-| `S0` | homing (solo da Idle) |
+| `S0 [X] [Y] [Z]` | homing degli assi indicati, tutti se omessi (solo da Idle) |
 | `S1` / `S12` | inizio / fine stampa (Idle <-> Printing) |
 | `S2` / `S3` | pausa / ripresa |
 | `S6` / `S7` | azzera / leggi errore |
 | `S10` | stato -> `STA <Idle|Homing|Printing|Paused|Error>` |
-| `S11` | diagnostica -> `DIA <uptime s> <reset> <ultimo N> <err cs> <err overflow> <ACK persi> <RAM libera>` |
+| `S11` | diagnostica -> `DIA <uptime s> <reset> <ultimo N> <err cs> <err overflow> <ACK persi> <RAM libera>` e `PRF <RAM minima mai rimasta libera> <durata max interrupt step, us> <scadenze step mancate>` |
 
-I movimenti sono segmenti rettilinei con rampa di accelerazione; archi (G2/G3) e
-spline (G5) vengono spezzati dal driver con errore di corda di 0,02 mm.
+I movimenti sono segmenti rettilinei; archi (G2/G3) e spline (G5) vengono spezzati
+dal driver con errore di corda di 0,02 mm e raccordati dal planner del firmware.
+
+## Tenere d'occhio RAM e CPU
+
+- `tools/check_budget.sh [--symbols]`: compila per Uno e fallisce se flash o RAM
+  globale superano i limiti (la RAM non usata dalle globali e' tutto lo stack disponibile).
+- `S11` sulla scheda vera: la riga `PRF` riporta il picco reale di stack (RAM minima
+  rimasta libera dall'avvio), la durata massima dell'interrupt degli step e quante
+  volte ha sforato il proprio intervallo. Con `MAX_STEP_RATE` = 8000 l'intervallo
+  minimo e' 125 us: se la durata massima si avvicina o le scadenze mancate non sono
+  zero, la CPU e' satura e `MAX_STEP_RATE` va abbassato.
