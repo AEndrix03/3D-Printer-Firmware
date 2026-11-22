@@ -191,7 +191,7 @@ Esempio di comando:
 
 ```
 
-N123 M10 X100.5 Y200.3 F3000 *35
+N123 M10 X100.5 Y200.3 F3000 *115
 
 ```
 
@@ -237,3 +237,11 @@ Per favore, consulta il file [CONTRIBUTING.md](CONTRIBUTING.md) per maggiori det
 
 Fatto con ❤️ per la comunità della stampa 3D
 
+## Protocollo e test
+
+- Il protocollo seriale completo (sequenza, checksum, ACK, resync, diagnostica) e' descritto in [PROTOCOL.md](PROTOCOL.md).
+- `test/native/` contiene una scheda simulata (`SimBoard`) che permette di compilare ed eseguire
+  il firmware su PC con `-DPLATFORM_NATIVE`. I test di integrazione con il driver stanno nel repo
+  `3DP-Driver-Core` (`tests/integration/run.sh`) e non richiedono hardware.
+- Prima di abilitare `TEMP_MONITORING_ENABLED` verificare in `src/include/Config.hpp` le costanti
+  del termistore (`THERMISTOR_BETA`, `THERMISTOR_R25`, `THERMISTOR_PULLUP`) con l'hardware reale.
