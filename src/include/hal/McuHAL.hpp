@@ -97,7 +97,16 @@ namespace hal {
 
         /// Tick fino alla prossima scadenza. Chiamabile dall'handler.
         void setInterval(uint16_t ticks);
+
+        /// Durata massima dell'handler (tick) dall'ultima lettura; la lettura la azzera.
+        uint16_t takeMaxHandlerTicks();
+
+        /// Quante volte l'handler ha sforato il proprio intervallo (CPU satura) dall'ultima lettura.
+        uint16_t takeOverruns();
     }
+
+    /// Minimo di RAM rimasta libera tra dati e stack dall'avvio (picco di stack reale).
+    uint16_t minFreeRam();
 
     // ===== Watchdog =====
     namespace watchdog {

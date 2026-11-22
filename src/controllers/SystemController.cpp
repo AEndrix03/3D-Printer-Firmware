@@ -130,6 +130,14 @@ namespace SystemController {
         CompactResponse::addInt(CompactResponse::getAckFailures());
         CompactResponse::addInt((int32_t) hal::getFreeHeap());
         CompactResponse::end();
+
+        // PRF <RAM minima mai rimasta libera> <durata max interrupt step, us> <scadenze step mancate>
+        // Gli ultimi due valori si riferiscono al periodo dall'ultima lettura.
+        CompactResponse::begin(PSTR("PRF"));
+        CompactResponse::addInt(hal::minFreeRam());
+        CompactResponse::addInt(hal::stepTimer::takeMaxHandlerTicks() / 2);
+        CompactResponse::addInt(hal::stepTimer::takeOverruns());
+        CompactResponse::end();
     }
 
     void reset() {

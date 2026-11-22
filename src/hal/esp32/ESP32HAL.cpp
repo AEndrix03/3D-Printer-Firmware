@@ -142,7 +142,13 @@ namespace hal {
         void setInterval(uint16_t ticks) {
             if (stepHwTimer) timerAlarmWrite(stepHwTimer, ticks, true);
         }
+
+        uint16_t takeMaxHandlerTicks() { return 0; }
+
+        uint16_t takeOverruns() { return 0; }
     }
+
+    uint16_t minFreeRam() { return 0; }
 
     ResetCause getResetCause() {
         switch (esp_reset_reason()) {

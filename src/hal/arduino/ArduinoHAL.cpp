@@ -49,11 +49,19 @@ ISR(WDT_vect) {
 }
 
 namespace {
+    constexpr uint8_t STACK_CANARY = 0xC5;
+
     void (*stepHandler)() = nullptr;
+    volatile uint16_t maxHandlerTicks = 0;
+    volatile uint16_t handlerOverruns = 0;
 }
 
 ISR(TIMER1_COMPA_vect) {
     if (stepHandler) stepHandler();
+
+    // In CTC il contatore riparte da zero alla scadenza: qui vale il tempo speso nell'handler
+    const uint16_t elapsed = TCNT1;
+    if (elapsed > maxHandlerTicks) maxHandlerTicks = elapsed;
 }
 
 namespace hal {
@@ -82,9 +90,40 @@ namespace hal {
             // In CTC il contatore riparte da zero a ogni scadenza: se la routine ha gia'
             // superato il nuovo valore, la scadenza andrebbe persa per un giro intero (32 ms).
             const uint16_t now = TCNT1;
-            if (ticks < now + 16) ticks = now + 16;
+            if (ticks < now + 16) {
+                ticks = now + 16;
+                if (handlerOverruns < 65535) handlerOverruns++;
+            }
             OCR1A = ticks;
         }
+
+        uint16_t takeMaxHandlerTicks() {
+            const uint8_t state = irqSave();
+            const uint16_t value = maxHandlerTicks;
+            maxHandlerTicks = 0;
+            irqRestore(state);
+            return value;
+        }
+
+        uint16_t takeOverruns() {
+            const uint8_t state = irqSave();
+            const uint16_t value = handlerOverruns;
+            handlerOverruns = 0;
+            irqRestore(state);
+            return value;
+        }
+    }
+
+    uint16_t minFreeRam() {
+        // La RAM libera e' stata "dipinta" all'avvio: i byte ancora intatti a partire
+        // dalla fine dei dati sono quelli che lo stack non ha mai raggiunto.
+        const uint8_t *p = (const uint8_t *) &__heap_start;
+        uint16_t count = 0;
+        while (p < (const uint8_t *) RAMEND && *p == STACK_CANARY) {
+            ++p;
+            ++count;
+        }
+        return count;
     }
 
     class ArduinoSerial : public hal::Serial {
@@ -176,6 +215,10 @@ namespace hal {
 
         bootInfo.magic = BOOT_MAGIC;
         bootInfo.cause = RESET_UNKNOWN;
+
+        // Dipinge la RAM tra la fine dei dati e lo stack attuale (vedi minFreeRam)
+        uint8_t marker;
+        for (uint8_t *q = (uint8_t *) &__heap_start; q < &marker - 16; ++q) *q = STACK_CANARY;
     }
 
     void reset() {

@@ -349,6 +349,10 @@ namespace hal {
     namespace stepTimer {
         void start(void (*handler)()) { timerHandler = handler; }
 
+        uint16_t takeMaxHandlerTicks() { return 0; }
+
+        uint16_t takeOverruns() { return 0; }
+
         void setInterval(uint16_t ticks) {
             timerIntervalTicks = ticks;
             std::lock_guard<std::mutex> lock(pinMutex);
@@ -356,6 +360,9 @@ namespace hal {
             steppedSinceInterval = false;
         }
     }
+
+    // Sul PC queste misure non hanno senso: valgono solo sull'hardware reale
+    uint16_t minFreeRam() { return 0; }
 
     void reset() {
         pendingReboot = RESET_SOFT;
