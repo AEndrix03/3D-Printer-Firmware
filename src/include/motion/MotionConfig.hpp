@@ -31,8 +31,9 @@ namespace MotionConfig {
     // in curva. Piu' basso = spigoli piu' fedeli ma piu' lenti. 0.02 e' un valore tipico.
     constexpr float JUNCTION_DEVIATION = 0.02f;
 
-    // Limiti del generatore di step. 8 kHz = 100 mm/s a 80 step/mm (oltre i 5000 mm/min di MAX_FEEDRATE): l'interrupt
-    // impiega ~60-70 us nel caso peggiore (in rampa) su ATmega328P a 16 MHz.
-    constexpr uint16_t MAX_STEP_RATE = 8000;
+    // Limiti del generatore di step. MISURATO su ATmega328P a 16 MHz (tools/hw_bench.py):
+    // l'interrupt dura fino a 124 us, quindi l'intervallo minimo deve restare sopra.
+    // 7000 step/s = 143 us; la velocita' massima (5000 mm/min a 80 step/mm) ne chiede 6667.
+    constexpr uint16_t MAX_STEP_RATE = 7000;
     constexpr uint16_t MIN_STEP_RATE = 40;
 }

@@ -116,6 +116,25 @@ dal driver con errore di corda di 0,02 mm e raccordati dal planner del firmware.
   minimo e' 125 us: se la durata massima si avvicina o le scadenze mancate non sono
   zero, la CPU e' satura e `MAX_STEP_RATE` va abbassato.
 
+### Misure sulla scheda reale
+
+`tools/hw_bench.py <porta>` esegue sulla scheda movimenti veloci, a quattro assi e flussi di
+segmenti corti, e stampa `DIA`/`PRF` dopo ogni fase. Valori misurati su un ATmega328P a
+16 MHz (clone con CH340, 115200 baud), scheda nuda:
+
+| Grandezza | Valore |
+|-----------|--------|
+| RAM minima rimasta libera (picco di stack) | 606 byte |
+| Durata massima dell'interrupt degli step | 117-124 us |
+| Scadenze degli step mancate | 0 |
+| Errori di checksum / ritrasmissioni su ~2000 comandi | 0 |
+| Giro completo di un comando senza lavoro (`S10`) | 7,9 ms |
+| Giro completo di un movimento (`M10` con E) | 12,6 ms, cioe' ~79 segmenti/s |
+| Arresto con `!` da 50 mm/s | 0,07 s |
+
+Il collo di bottiglia per le curve fitte e' il giro del comando (stop-and-wait su USB), non
+il generatore di step: a 79 segmenti/s, segmenti da 0,2 mm passano a ~16 mm/s.
+
 ## Limiti di corsa e alimentazione dei motori
 
 - **Limiti software.** Un movimento (`M10`, `M11`) che porterebbe un asse riferito fuori da
