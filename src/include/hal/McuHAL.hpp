@@ -56,6 +56,13 @@ namespace hal {
 
         /// Ritorna quando l'ultimo byte scritto e' uscito dal filo.
         void flush();
+
+        /**
+         * true (una sola volta) se dall'ultima chiamata e' arrivato il carattere di arresto
+         * '!'. Viene riconosciuto alla ricezione, senza passare dal buffer: resta
+         * immediato anche con altri comandi in attesa davanti a lui.
+         */
+        bool takeAbortRequest();
     }
 
     // ===== Interrupt =====

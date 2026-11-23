@@ -133,10 +133,55 @@ segmenti corti, e stampa `DIA`/`PRF` dopo ogni fase. Valori misurati su un ATmeg
 | Errori di checksum / ritrasmissioni su ~2000 comandi | 0 |
 | Giro completo di un comando senza lavoro (`S10`) | 7,9 ms |
 | Giro completo di un movimento (`M10` con E) | 12,6 ms, cioe' ~79 segmenti/s |
+| Movimenti binari, 4 in volo | 173-218 segmenti/s |
 | Arresto con `!` da 50 mm/s | 0,07 s |
 
 Il collo di bottiglia per le curve fitte e' il giro del comando (stop-and-wait su USB), non
 il generatore di step: a 79 segmenti/s, segmenti da 0,2 mm passano a ~16 mm/s.
+
+## Movimenti in formato binario
+
+I movimenti di una stampa non viaggiano come testo: il driver li invia come frame binari,
+in step gia' calcolati (nessuna virgola mobile da convertire sul firmware), e ne tiene fino a
+quattro in volo senza attendere ogni risposta. I comandi di testo (`M10`, `M11`, ...) restano
+validi e sono sempre uno alla volta.
+
+Ogni byte del frame ha il bit 7 a 1 e porta 6 bit utili (un "sestetto"): l'intestazione e'
+`11xxxxxx`, gli altri byte `10xxxxxx`. Un byte di movimento non puo' quindi essere scambiato
+per testo, per un fine riga o per `!`, e l'intestazione si riconosce da sola: dopo un errore
+la ricezione si riallinea al frame successivo, senza attese.
+
+| Campo | Sestetti | Contenuto |
+|-------|----------|-----------|
+| intestazione | 1 | bit5 velocita' presente, bit4 campi larghi, bit3..0 assi presenti (X Y Z E) |
+| sequenza | 1 | numero del comando modulo 64 |
+| un campo per asse presente | 2 (3 se larghi) | step relativi con segno: +-2047 (+-131071 se larghi) |
+| velocita' | 3, se presente | mm/min interi; assente = resta l'ultima |
+| controllo | 2 | 12 bit bassi del CRC-16/CCITT dei byte precedenti |
+
+Un segmento corto su X, Y ed E occupa 10 byte (38 caratteri in testo). La specifica in codice e'
+`src/include/MoveFrame.hpp`.
+
+Regole:
+
+- **Risposta**: come per il testo, una riga per frame: `OK0 N<n> D<d>` con il numero completo.
+- **Frame corrotto o incompleto**: `E01 N<atteso>`; i frame gia' in volo dietro di lui ricevono
+  `E04 N<atteso>`. Il driver rispedisce da `<atteso>`.
+- **Frame gia' ricevuto** (risposta andata persa, frame rispedito): `E03`, non viene rieseguito.
+- **Rifiuto** (`ERR LIMIT`, `COLD_EXT`, `INV_STATE`) **o arresto `!`**: i frame successivi vengono
+  scartati con `ERR SKIPPED` finche' non arriva un comando di testo. I movimenti in volo non
+  partono mai da una posizione diversa da quella prevista dal driver.
+- **`!`** viene riconosciuto nell'interrupt di ricezione, quindi e' immediato anche con altri
+  comandi in attesa nel buffer.
+- **`M115`** restituisce `SPM <step/mm X Y Z E>` e `CRT STP <x> <y> <z>`: il driver tiene una
+  copia della posizione in step e la rilegge ogni volta che puo' essere cambiata senza che lui
+  lo sappia (arresto, allarme, homing, `M12`, rifiuto, riavvio).
+- Il firmware elabora **un comando per giro** del ciclo principale: tra un comando e il
+  successivo watchdog, sicurezza e temperatura vengono sempre aggiornati, anche con il buffer
+  di ricezione sempre pieno.
+
+Misurato sulla scheda reale (`tools/hw_bench.py`): da ~79 a 173-218 segmenti al secondo, senza
+errori ne' ritrasmissioni. Il limite e' ora il tempo di pianificazione del firmware per segmento.
 
 ## Limiti di corsa e alimentazione dei motori
 

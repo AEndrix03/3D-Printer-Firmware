@@ -64,10 +64,15 @@ namespace {
     volatile uint8_t rxHead = 0; // scritto solo dall'interrupt
     volatile uint8_t rxTail = 0; // scritto solo dal ciclo principale
     bool txUsed = false;
+    volatile bool abortFlag = false;
 }
 
 ISR(USART_RX_vect) {
     const uint8_t byte = UDR0;
+    if (byte == '!') {
+        abortFlag = true; // comando in tempo reale: non entra nell'anello
+        return;
+    }
     const uint8_t next = (uint8_t) (rxHead + 1) & RX_MASK;
     // Anello pieno: il byte viene scartato, se ne accorge il checksum del comando
     if (next != rxTail) {
@@ -199,6 +204,12 @@ namespace hal {
         void writeP(const char *flashText) {
             uint8_t c;
             while ((c = pgm_read_byte(flashText++)) != 0) write(c);
+        }
+
+        bool takeAbortRequest() {
+            if (!abortFlag) return false;
+            abortFlag = false;
+            return true;
         }
 
         void flush() {

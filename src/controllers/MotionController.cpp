@@ -26,6 +26,7 @@ namespace {
     float eRemainder = 0.0f;      // frazione di step E non ancora eseguita (evita deriva di estrusione)
     float lastFeedrate = 1000.0f; // F e' modale
     bool abortRequested = false;
+    bool streamLatched = false;   // movimenti binari scartati fino al prossimo comando di testo
     bool referenced = false;
     bool motorsOn = false;
     uint8_t limitAxes = 0;        // bit per asse: posizione riferita, i limiti di corsa valgono
@@ -66,17 +67,15 @@ namespace {
 
     /**
      * Lavori periodici mentre un comando attende (posto in coda o fine dei movimenti):
-     * watchdog, BUSY, protezioni e abort dall'host. Il protocollo e' stop-and-wait,
-     * quindi durante l'attesa l'unico byte valido in arrivo e' '!'.
+     * watchdog, BUSY, protezioni e abort dall'host. I byte in arrivo restano nel buffer
+     * di ricezione: l'host puo' aver gia' inviato i movimenti successivi.
      * @return false se l'attesa va interrotta
      */
     bool waitTask() {
         hal::watchdog::reset();
         BusyHandler::update();
         SafetyManager::update();
-        while (hal::serial::available()) {
-            if (hal::serial::read() == '!') MotionController::abort();
-        }
+        MotionController::pollAbort();
         return !abortRequested && StateMachine::getState() != MachineState::Error;
     }
 
@@ -285,9 +284,52 @@ namespace MotionController {
     }
 
     void abort() {
+        // I movimenti binari gia' in volo non devono ripartire dopo l'arresto
+        streamLatched = true;
         if (Stepper::isIdle()) return;
         abortRequested = true;
         Stepper::hold();
+    }
+
+    void pollAbort() {
+        if (hal::serial::takeAbortRequest()) abort();
+    }
+
+    void releaseStream() {
+        streamLatched = false;
+    }
+
+    void handleStreamMove(const int32_t *delta, uint32_t feedrate, uint32_t commandNumber) {
+        if (StateMachine::getState() == MachineState::Error) {
+            CompactResponse::begin(PSTR("ERR"));
+            CompactResponse::addStr(SafetyManager::getErrorReason());
+            CompactResponse::end();
+            CompactResponse::setResult(CompactResponse::BLOCKED_MOTION_ERROR);
+            return;
+        }
+        if (streamLatched) {
+            CompactResponse::reject(PSTR("SKIPPED"));
+            return;
+        }
+
+        PGM_P refusal = nullptr;
+        if (StateMachine::getState() != MachineState::Printing) {
+            refusal = PSTR("INV_STATE");
+        } else {
+            settle();
+            if (!withinTravel(delta)) refusal = PSTR("LIMIT");
+            else if (delta[AX_E] != 0 && !ExtruderController::canExtrude()) refusal = PSTR("COLD_EXT");
+        }
+        if (refusal) {
+            streamLatched = true;
+            CompactResponse::reject(refusal);
+            return;
+        }
+
+        if (feedrate > 0) lastFeedrate = (float) feedrate;
+        if (delta[AX_X] || delta[AX_Y] || delta[AX_Z] || delta[AX_E]) {
+            if (!enqueue(delta, lastFeedrate, commandNumber)) streamLatched = true; // interrotto in attesa
+        }
     }
 
     void emergencyStop() {
@@ -329,7 +371,7 @@ namespace MotionController {
     }
 
     void handle(uint8_t code, const char *params, uint32_t commandNumber) {
-        if (StateMachine::getState() == MachineState::Error && code != 0 && code != 114) {
+        if (StateMachine::getState() == MachineState::Error && code != 0 && code != 114 && code != 115) {
             CompactResponse::begin(PSTR("ERR"));
             CompactResponse::addStr(SafetyManager::getErrorReason());
             CompactResponse::end();
@@ -384,6 +426,23 @@ namespace MotionController {
                 CompactResponse::addFloat((float) p.y / MotionConfig::STEPS_PER_MM_Y, 3);
                 CompactResponse::addFloat((float) p.z / MotionConfig::STEPS_PER_MM_Z, 3);
                 CompactResponse::addInt(referenced ? 1 : 0);
+                CompactResponse::end();
+                break;
+            }
+            case 115: {
+                // Per l'host che invia i movimenti in step: fattori di conversione e posizione
+                // del planner (fine dei movimenti in coda), cioe' il punto da cui parte il prossimo.
+                CompactResponse::begin(PSTR("SPM"));
+                CompactResponse::addFloat(MotionConfig::STEPS_PER_MM_X, 2);
+                CompactResponse::addFloat(MotionConfig::STEPS_PER_MM_Y, 2);
+                CompactResponse::addFloat(MotionConfig::STEPS_PER_MM_Z, 2);
+                CompactResponse::addFloat(ExtruderController::getStepsPerMm(), 2);
+                CompactResponse::end();
+                settle();
+                CompactResponse::begin(PSTR("STP"), true);
+                CompactResponse::addInt(Planner::position(AX_X));
+                CompactResponse::addInt(Planner::position(AX_Y));
+                CompactResponse::addInt(Planner::position(AX_Z));
                 CompactResponse::end();
                 break;
             }

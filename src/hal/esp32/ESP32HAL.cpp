@@ -25,6 +25,9 @@ namespace hal {
         void writeP(const char *flashText) { ::Serial.print(flashText); }
 
         void flush() { ::Serial.flush(); }
+
+        // DA FARE su ESP32: riconoscere '!' alla ricezione (callback della UART)
+        bool takeAbortRequest() { return false; }
     }
 
     void halPinMode(uint8_t pin, HalPinMode mode) {

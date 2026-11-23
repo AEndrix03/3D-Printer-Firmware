@@ -94,6 +94,7 @@ namespace {
     std::atomic<int> pendingReboot{-1};
     std::atomic<int> bites{0};
     std::atomic<bool> stackGuardBroken{false};
+    std::atomic<bool> abortFlag{false};
     hal::ResetCause resetCause = hal::RESET_POWERON;
 
     // ---- interrupt simulati: un mutex ricorsivo fa da "interrupt disabilitati" ----
@@ -274,6 +275,8 @@ namespace hal {
         void writeP(const char *flashText) { write((const uint8_t *) flashText, (uint8_t) strlen(flashText)); }
 
         void flush() {}
+
+        bool takeAbortRequest() { return abortFlag.exchange(false); }
     }
 
     void halPinMode(uint8_t, HalPinMode) {}
@@ -375,7 +378,11 @@ namespace sim {
 
     void hostWrite(const std::string &bytes) {
         std::lock_guard<std::mutex> lock(serialMutex);
-        toFirmware.insert(toFirmware.end(), bytes.begin(), bytes.end());
+        for (const char c: bytes) {
+            // come l'interrupt di ricezione vero: '!' non entra nel buffer
+            if (c == '!') abortFlag = true;
+            else toFirmware.push_back(c);
+        }
     }
 
     std::string hostReadLine(int timeoutMs) {

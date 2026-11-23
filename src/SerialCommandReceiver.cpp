@@ -8,6 +8,7 @@
 #include "./include/Application.hpp"
 #include "./include/CompactResponse.hpp"
 #include "./include/hal/McuHAL.hpp"
+#include "./include/MoveFrame.hpp"
 
 uint32_t SerialCommandReceiver::lastCommandNumber = 0;
 uint8_t SerialCommandReceiver::checksumErrors = 0;
@@ -19,6 +20,8 @@ namespace {
     char inputBuffer[64];
     uint8_t bufferIndex = 0;
     bool lineOverflow = false;
+    // Frame binario in arrivo: usa lo stesso buffer della riga di testo (non si sovrappongono mai)
+    uint8_t frameLength = 0; // 0 = nessun frame in corso
 
     void bump(uint8_t &counter) {
         if (counter < 255) counter++;
@@ -61,6 +64,7 @@ namespace {
         }
 
         Application::notifyCommandReceived();
+        MotionController::releaseStream(); // l'host parla in testo: e' riallineato
 
         // --- sequenza ---
         if (cmd.number == 0) {
@@ -92,15 +96,112 @@ namespace {
     }
 }
 
+namespace {
+    void frameError() {
+        using namespace SerialCommandReceiver;
+        frameLength = 0;
+        bufferIndex = 0;
+        bump(checksumErrors);
+        CompactResponse::send(CompactResponse::CHECKSUM_ERROR, lastCommandNumber + 1);
+    }
+
+    /** Legge un campo con segno di `sextets` sestetti a partire da `at`. */
+    int32_t readSigned(uint8_t &at, uint8_t sextets) {
+        uint32_t value = 0;
+        for (uint8_t i = 0; i < sextets; ++i) value = (value << 6) | ((uint8_t) inputBuffer[at++] & 0x3F);
+        const uint32_t sign = (uint32_t) 1 << (sextets * 6 - 1);
+        return (value & sign) ? (int32_t) value - (int32_t) (sign << 1) : (int32_t) value;
+    }
+
+    void processFrame() {
+        using namespace SerialCommandReceiver;
+        const uint8_t length = frameLength;
+        frameLength = 0;
+        bufferIndex = 0;
+
+        // --- controllo ---
+        uint16_t crc = 0xFFFF;
+        for (uint8_t i = 0; i < length - 2; ++i) crc = MoveFrame::crcUpdate(crc, (uint8_t) inputBuffer[i]);
+        const uint16_t received = (uint16_t) (((uint8_t) inputBuffer[length - 2] & 0x3F) << 6) |
+                                  ((uint8_t) inputBuffer[length - 1] & 0x3F);
+        if ((crc & 0x0FFF) != received) {
+            bump(checksumErrors);
+            CompactResponse::send(CompactResponse::CHECKSUM_ERROR, lastCommandNumber + 1);
+            return;
+        }
+
+        Application::notifyCommandReceived();
+
+        // --- sequenza (modulo 64) ---
+        const uint8_t sequence = (uint8_t) inputBuffer[1] & MoveFrame::SEQUENCE_MASK;
+        const uint8_t behind = (uint8_t) (((uint8_t) (lastCommandNumber + 1) - sequence) & MoveFrame::SEQUENCE_MASK);
+        if (behind != 0) {
+            if (behind <= 8 && behind <= lastCommandNumber) {
+                // gia' ricevuto: l'host lo ha rispedito perche' la risposta era andata persa
+                CompactResponse::send(CompactResponse::DUPLICATE_COMMAND_ERROR, lastCommandNumber + 1 - behind);
+            } else {
+                CompactResponse::send(CompactResponse::RESEND_COMMAND_ERROR, lastCommandNumber + 1);
+            }
+            return;
+        }
+        const uint32_t number = ++lastCommandNumber;
+
+        // --- campi ---
+        const uint8_t header = (uint8_t) inputBuffer[0];
+        const uint8_t sextets = (header & MoveFrame::HEADER_WIDE) ? 3 : 2;
+        uint8_t at = 2;
+        int32_t delta[4] = {0, 0, 0, 0};
+        for (uint8_t axis = 0; axis < 4; ++axis) {
+            if (header & (uint8_t) (0x08 >> axis)) delta[axis] = readSigned(at, sextets);
+        }
+        uint32_t feedrate = 0;
+        if (header & MoveFrame::HEADER_FEED) {
+            for (uint8_t i = 0; i < 3; ++i) feedrate = (feedrate << 6) | ((uint8_t) inputBuffer[at++] & 0x3F);
+        }
+
+        // --- esecuzione: esattamente una risposta terminale ---
+        CompactResponse::takeResult();
+        SafetyManager::notifyCommandReceived();
+        BusyHandler::start();
+        MotionController::handleStreamMove(delta, feedrate, number);
+        BusyHandler::stop();
+        SafetyManager::notifyCommandReceived();
+
+        const CompactResponse::ResponseCode result = CompactResponse::takeResult();
+        if (result == CompactResponse::OK) {
+            CompactResponse::sendOk(number, MotionController::lastCompletedCommand(number));
+        } else {
+            CompactResponse::send(result, number);
+        }
+    }
+}
+
 void SerialCommandReceiver::update() {
+    MotionController::pollAbort();
+
     while (hal::serial::available()) {
         const char c = (char) hal::serial::read();
+        const uint8_t byte = (uint8_t) c;
 
-        if (c == '!') {
-            // Carattere in tempo reale: arresto controllato del movimento, a qualunque punto della riga
-            MotionController::abort();
+        // ---- movimento binario: tutti i byte hanno il bit 7 a 1 ----
+        if (byte & 0x80) {
+            if (MoveFrame::isHeader(byte)) {
+                if (frameLength != 0) frameError(); // il frame precedente e' rimasto a meta'
+                lineOverflow = false;
+                bufferIndex = 0;
+                frameLength = MoveFrame::lengthFor(byte);
+                inputBuffer[bufferIndex++] = c;
+            } else if (frameLength != 0) {
+                inputBuffer[bufferIndex++] = c;
+                if (bufferIndex == frameLength) {
+                    processFrame();
+                    return; // un comando per giro: vedi la nota sulle righe di testo
+                }
+            }
+            // byte di continuazione senza intestazione: resto di un frame gia' scartato
             continue;
         }
+        if (frameLength != 0) frameError(); // testo nel mezzo di un frame: il frame e' perso
 
         if (c == '\n' || c == '\r') {
             if (lineOverflow) {
@@ -116,6 +217,11 @@ void SerialCommandReceiver::update() {
             inputBuffer[bufferIndex] = '\0';
             bufferIndex = 0;
             processLine();
+            // Un solo comando per giro, anche se nel buffer ce ne sono altri: tra un comando
+            // e il successivo il ciclo principale deve sempre poter azzerare il watchdog e
+            // aggiornare sicurezza e temperatura. Con i movimenti inviati in fila il buffer
+            // puo' non svuotarsi mai.
+            return;
         } else if (lineOverflow) {
             // continua a scartare fino al fine riga
         } else if (bufferIndex >= sizeof(inputBuffer) - 1) {

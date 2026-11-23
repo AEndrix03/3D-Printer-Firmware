@@ -28,8 +28,27 @@ namespace MotionController {
      *         Gli assi impostati diventano riferiti: da li' valgono i limiti di corsa
      *  - 99:  diagnosi asse
      *  - 114: posizione reale in questo istante -> "CRT POS x y z <riferita 0/1>"
+     *  - 115: posizione in step e step/mm -> "SPM sx sy sz se" e "CRT STP x y z"
      */
     void handle(uint8_t code, const char *params, uint32_t commandNumber);
+
+    /**
+     * @brief Movimento ricevuto in formato binario (vedi MoveFrame.hpp): step relativi
+     * gia' calcolati dall'host, nessuna conversione da testo.
+     * @param delta step con segno per X, Y, Z, E
+     * @param feedrate mm/min; 0 = invariata
+     *
+     * Dopo un rifiuto o un arresto i movimenti binari successivi vengono scartati
+     * (ERR SKIPPED) finche' non arriva un comando di testo: l'host puo' averne altri
+     * gia' in volo, e non devono partire da una posizione che non e' quella prevista.
+     */
+    void handleStreamMove(const int32_t *delta, uint32_t feedrate, uint32_t commandNumber);
+
+    /** Un comando di testo e' arrivato: l'host si e' riallineato, i movimenti binari ripartono. */
+    void releaseStream();
+
+    /** Da chiamare spesso: esegue l'arresto se l'host ha inviato '!'. */
+    void pollAbort();
 
     /**
      * @brief Accoda una estrusione senza movimento XYZ (usata da ExtruderController).

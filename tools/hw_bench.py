@@ -70,6 +70,79 @@ def send(body, sync=False, timeout=8.0, quiet=True):
     raise RuntimeError('no answer to %r' % body)
 
 
+def crc_update(crc, data):
+    data ^= crc & 0xFF
+    data = (data ^ (data << 4)) & 0xFF
+    return ((((data << 8) | (crc >> 8)) ^ (data >> 4) ^ (data << 3)) & 0xFFFF)
+
+
+def move_frame(num, delta, feed=0):
+    """Frame binario di movimento (vedi src/include/MoveFrame.hpp)."""
+    wide = any(abs(d) > 2047 for d in delta)
+    header = 0xC0 | (0x10 if wide else 0) | (0x20 if feed else 0)
+    for axis, d in enumerate(delta):
+        if d:
+            header |= 0x08 >> axis
+    out = [header, 0x80 | (num & 0x3F)]
+    sextets = 3 if wide else 2
+    for d in delta:
+        if d:
+            value = d & 0xFFFFFFFF
+            out += [0x80 | ((value >> (6 * i)) & 0x3F) for i in range(sextets - 1, -1, -1)]
+    if feed:
+        out += [0x80 | ((feed >> (6 * i)) & 0x3F) for i in range(2, -1, -1)]
+    crc = 0xFFFF
+    for b in out:
+        crc = crc_update(crc, b)
+    out += [0x80 | ((crc >> 6) & 0x3F), 0x80 | (crc & 0x3F)]
+    return bytes(out)
+
+
+WINDOW_FRAMES = 4
+recent = []
+WINDOW_BYTES = 56
+
+
+def stream(moves, timeout=8.0):
+    """Invia i movimenti binari tenendone al massimo WINDOW_FRAMES in volo. `moves` = [(delta, feed)]."""
+    global n
+    pending = []  # (numero, frame)
+    index = 0
+    while index < len(moves) or pending:
+        while index < len(moves) and len(pending) < WINDOW_FRAMES:
+            delta, feed = moves[index]
+            frame = move_frame(n + 1, delta, feed)
+            if sum(len(f) for _, f in pending) + len(frame) > WINDOW_BYTES:
+                break
+            n += 1
+            ser.write(frame)
+            pending.append((n, frame))
+            index += 1
+        line = readline(timeout)
+        recent.append(line)
+        del recent[:-14]
+        if line is None:
+            stats['timeouts'] += 1
+            raise RuntimeError('no answer to move N%d; pending %s; last lines %r'
+                               % (pending[0][0], [num for num, _ in pending], recent))
+        m = TERMINAL.match(line)
+        if not m:
+            continue
+        code, rn = m.group(1), int(m.group(2))
+        if code in ('OK0', 'E03') and pending and rn == pending[0][0]:
+            pending.pop(0)
+        elif code in ('E01', 'E04'):
+            stats['e01'] += 1
+            stats['retx'] += 1
+            time.sleep(0.15)
+            ser.reset_input_buffer()
+            pending = [(num, f) for num, f in pending if num >= rn]
+            for _, f in pending:
+                ser.write(f)
+        elif code != 'OK0':
+            raise RuntimeError('move refused: ' + line)
+
+
 def wait_idle(limit=120.0):
     end = time.time() + limit
     while time.time() < end:
@@ -118,39 +191,41 @@ print('start print:', send('S1')[0])
 
 # --- 1. movimento lungo alla massima velocita' (X+Y in diagonale: 2 assi a ~6,7 kHz) ---
 t = time.time()
-send('M10 X150 Y150 F5000')
+stream([((12000, 12000, 0, 0), 5000)])
 wait_idle()
 print('diagonale 212 mm F5000: %.2f s' % (time.time() - t))
 diag('dopo diagonale veloce')
 
 # --- 2. quattro assi insieme (caso peggiore dell'interrupt: X Y Z E) ---
 t = time.time()
-send('M10 X-150 Y-150 Z-2 E20 F5000')
+stream([((-12000, -12000, -800, 1600), 5000)])
 wait_idle()
 print('ritorno a 4 assi: %.2f s' % (time.time() - t))
 diag('dopo 4 assi')
 
-# --- 3. flusso di segmenti corti, come in una curva: quanti al secondo passano? ---
-for seg_mm, feed, count in ((0.5, 3000, 600), (0.2, 3000, 600), (0.2, 6000, 600)):
+# --- 3. flusso di segmenti corti in formato binario, 4 in volo: quanti al secondo passano? ---
+for seg_mm, feed, count in ((0.5, 3000, 600), (0.2, 3000, 600), (0.2, 4800, 800), (0.1, 4800, 800)):
     before = dict(stats)
     t = time.time()
+    moves = []
     for i in range(count):
-        dy = 0.05 if i % 2 == 0 else -0.05
-        send('M10 X%.3f Y%.3f E0.01' % (seg_mm, dy) + (' F%d' % feed if i == 0 else ''))
-    stream = time.time() - t
+        dy = 4 if i % 2 == 0 else -4
+        moves.append(((int(round(seg_mm * 80)), dy, 0, 1), feed if i == 0 else 0))
+    stream(moves)
+    stream_time = time.time() - t
     wait_idle()
     total = time.time() - t
     ideal = count * seg_mm / (feed / 60.0)
     print('segmenti %.1f mm F%d: %d in %.2f s = %.0f seg/s (ideale alla velocita\' richiesta %.2f s, reale %.2f s) '
           'ritrasmissioni %d, E01 %d'
-          % (seg_mm, feed, count, stream, count / stream, ideal, total,
+          % (seg_mm, feed, count, stream_time, count / stream_time, ideal, total,
              stats['retx'] - before['retx'], stats['e01'] - before['e01']))
     diag('dopo segmenti %.1f mm F%d' % (seg_mm, feed))
-    send('M10 X-%.3f F6000' % (count * seg_mm))
+    stream([((-int(round(count * seg_mm * 80)), 0, 0, 0), 6000)])
     wait_idle()
 
 # --- 4. arresto in tempo reale durante un movimento ---
-send('M10 X100 F3000')
+stream([((8000, 0, 0, 0), 3000)])
 time.sleep(0.4)
 t = time.time()
 ser.write(b'!')

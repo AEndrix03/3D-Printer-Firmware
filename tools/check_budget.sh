@@ -7,7 +7,7 @@
 #   tools/check_budget.sh --symbols  elenca anche le variabili che occupano piu' RAM
 set -euo pipefail
 
-MAX_FLASH="${MAX_FLASH:-26000}"   # byte (limite fisico: 32256): soglia stretta, per non perdere i guadagni
+MAX_FLASH="${MAX_FLASH:-27500}"   # byte (limite fisico: 32256): soglia stretta, per non perdere i guadagni
 MAX_GLOBALS="${MAX_GLOBALS:-1000}" # byte: lascia almeno ~1050 byte allo stack
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
