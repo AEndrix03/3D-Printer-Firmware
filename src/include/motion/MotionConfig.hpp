@@ -32,8 +32,9 @@ namespace MotionConfig {
     constexpr float JUNCTION_DEVIATION = 0.02f;
 
     // Limiti del generatore di step. MISURATO su ATmega328P a 16 MHz (tools/hw_bench.py):
-    // l'interrupt dura fino a 124 us, quindi l'intervallo minimo deve restare sopra.
-    // 7000 step/s = 143 us; la velocita' massima (5000 mm/min a 80 step/mm) ne chiede 6667.
-    constexpr uint16_t MAX_STEP_RATE = 7000;
+    // l'interrupt dura al massimo 64 us. A 10000 step/s l'intervallo e' 100 us: restano
+    // oltre un terzo della CPU al ciclo principale e margine per la seriale.
+    // La velocita' massima configurata (5000 mm/min a 80 step/mm) ne chiede 6667.
+    constexpr uint16_t MAX_STEP_RATE = 10000;
     constexpr uint16_t MIN_STEP_RATE = 40;
 }

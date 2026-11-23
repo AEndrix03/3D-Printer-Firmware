@@ -2,6 +2,7 @@
 #include "../include/motion/Stepper.hpp"
 #include "../include/motion/Planner.hpp"
 #include "../include/motion/MotionConfig.hpp"
+#include "../include/motion/StepTimerTable.hpp"
 #include "../include/controllers/EndstopController.hpp"
 #include "../include/hal/drivers/StepperConfig.hpp"
 #include "../include/hal/FastPin.hpp"
@@ -27,9 +28,22 @@ namespace {
     volatile bool endstopFlag = false;
     volatile bool running = false;
 
+    /**
+     * Intervallo del timer per una velocita' in step/s, senza divisioni: tabella in
+     * flash con interpolazione lineare (vedi tools/gen_step_table.py).
+     */
     inline uint16_t ticksForRate(uint16_t rate) {
-        const uint32_t ticks = hal::stepTimer::TICKS_PER_SECOND / rate;
-        return ticks > 65535UL ? 65535 : (uint16_t) ticks;
+        if (rate >= 512) {
+            if (rate > 32767) rate = 32767;
+            const uint16_t *entry = StepTimerTable::FAST[rate >> 7];
+            const uint16_t base = pgm_read_word(&entry[0]);
+            const uint16_t delta = pgm_read_word(&entry[1]);
+            return base - (uint16_t) (((uint32_t) delta * (uint8_t) (rate & 127)) >> 7);
+        }
+        const uint16_t *entry = StepTimerTable::SLOW[rate >> 3];
+        const uint16_t base = pgm_read_word(&entry[0]);
+        const uint16_t delta = pgm_read_word(&entry[1]);
+        return base - (uint16_t) (((uint32_t) delta * (uint8_t) (rate & 7)) >> 3);
     }
 
     inline void setDirections(uint8_t bits) {
