@@ -93,6 +93,7 @@ namespace {
     std::atomic<bool> frozen{false};
     std::atomic<int> pendingReboot{-1};
     std::atomic<int> bites{0};
+    std::atomic<bool> stackGuardBroken{false};
     hal::ResetCause resetCause = hal::RESET_POWERON;
 
     // ---- interrupt simulati: un mutex ricorsivo fa da "interrupt disabilitati" ----
@@ -372,6 +373,8 @@ namespace hal {
     // Sul PC queste misure non hanno senso: valgono solo sull'hardware reale
     uint16_t minFreeRam() { return 0; }
 
+    bool stackGuardIntact() { return !stackGuardBroken.load(); }
+
     void reset() {
         pendingReboot = RESET_SOFT;
         throw RebootSignal{};
@@ -537,4 +540,6 @@ namespace sim {
     void reboot(uint8_t cause) { pendingReboot = cause; }
 
     int watchdogBites() { return bites.load(); }
+
+    void breakStackGuard(bool broken) { stackGuardBroken = broken; }
 }

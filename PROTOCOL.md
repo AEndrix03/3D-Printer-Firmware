@@ -116,6 +116,36 @@ dal driver con errore di corda di 0,02 mm e raccordati dal planner del firmware.
   minimo e' 125 us: se la durata massima si avvicina o le scadenze mancate non sono
   zero, la CPU e' satura e `MAX_STEP_RATE` va abbassato.
 
+### Misure del collegamento
+
+`tools/linktest` contiene uno sketch senza logica di stampa e uno script che misurano il solo
+giro del comando (scheda + adattatore USB + PC) al variare di formato, baud e numero di
+comandi inviati senza attendere la risposta ("finestra"). Comandi al secondo misurati:
+
+| Comando | 115200, finestra 1 | 115200, finestra 3-4 | 250000, finestra 3 |
+|---------|--------------------|----------------------|--------------------|
+| oggi: testo con decimali, 38 byte | 111 | (non entra nel buffer da 64) | - |
+| pianificato dal PC, testo, 50 byte | 100 | (non entra) | - |
+| pianificato dal PC, testo compatto, 33 byte | 125 | 284 | 501 |
+| pianificato dal PC, binario, 20 byte | 148 | 497 | 995 |
+
+Cosa dicono:
+
+- attendere ogni risposta costa 4-6 ms fissi di USB, qualunque sia il baud: e' la finestra
+  la leva principale, non la velocita' della linea;
+- con la finestra il limite diventa il numero di byte del comando, quindi il formato binario
+  vale quasi il doppio del testo;
+- accorciare la risposta non aiuta (a volte peggiora, per come l'adattatore USB raggruppa i byte);
+- oltre 250000 baud non si guadagna nulla: il limite e' il millisecondo del frame USB.
+
+Il firmware reale oggi fa ~79 movimenti al secondo perche' a questi tempi aggiunge ~4,7 ms di
+pianificazione per segmento.
+
+- **Guardia sullo stack.** Se lo stack arriva a meno di 128 byte dalle variabili il firmware
+  spegne l'heater, ferma i motori e invia `ALM STACK`: sull'ATmega non c'e' protezione di
+  memoria, e oltre quel punto le variabili verrebbero sovrascritte in silenzio. Non e' un
+  errore da azzerare e proseguire: indica che il firmware va alleggerito.
+
 ### Misure sulla scheda reale
 
 `tools/hw_bench.py <porta>` esegue sulla scheda movimenti veloci, a quattro assi e flussi di

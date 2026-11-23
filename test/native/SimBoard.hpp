@@ -83,4 +83,7 @@ namespace sim {
 
     /// Quante volte il watchdog (2 s) sarebbe scattato. Deve restare 0.
     int watchdogBites();
+
+    /// Simula lo stack che entra nella zona di guardia (sul PC non c'e' uno stack da misurare).
+    void breakStackGuard(bool broken);
 }

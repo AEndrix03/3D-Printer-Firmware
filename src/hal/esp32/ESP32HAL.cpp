@@ -150,6 +150,8 @@ namespace hal {
 
     uint16_t minFreeRam() { return 0; }
 
+    bool stackGuardIntact() { return true; }
+
     ResetCause getResetCause() {
         switch (esp_reset_reason()) {
             case ESP_RST_POWERON: return RESET_POWERON;

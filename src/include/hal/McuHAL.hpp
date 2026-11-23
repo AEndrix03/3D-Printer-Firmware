@@ -108,6 +108,15 @@ namespace hal {
     /// Minimo di RAM rimasta libera tra dati e stack dall'avvio (picco di stack reale).
     uint16_t minFreeRam();
 
+    /// Zona di RAM, subito sopra i dati, che lo stack non deve mai raggiungere.
+    constexpr uint16_t STACK_GUARD_BYTES = 128;
+
+    /**
+     * false se lo stack e' arrivato dentro la zona di guardia: restano meno di
+     * STACK_GUARD_BYTES prima di sovrascrivere le variabili. Costo costante.
+     */
+    bool stackGuardIntact();
+
     // ===== Watchdog =====
     namespace watchdog {
         void enable(uint16_t timeout_ms);

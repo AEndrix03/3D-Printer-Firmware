@@ -80,11 +80,26 @@ def wait_idle(limit=120.0):
     return False
 
 
+# Soglie di accettazione: una modifica al firmware che le supera non va tenuta.
+MIN_FREE_RAM = 300      # byte liberi al picco di stack
+MAX_ISR_US = 130        # durata massima dell'interrupt degli step
+worst = {'ram': 99999, 'isr': 0, 'overruns': 0, 'cs': 0, 'overflow': 0, 'ack': 0}
+
+
 def diag(label):
     _, _, info = send('S11')
     dia = next((l for l in info if l.startswith('DIA')), '')
     prf = next((l for l in info if l.startswith('PRF')), '')
     print('%-34s %s | %s' % (label, dia, prf))
+    d = dia.split('*')[0].split()
+    p = prf.split('*')[0].split()
+    if len(d) >= 8 and len(p) >= 4:
+        worst['cs'] = max(worst['cs'], int(d[4]))
+        worst['overflow'] = max(worst['overflow'], int(d[5]))
+        worst['ack'] = max(worst['ack'], int(d[6]))
+        worst['ram'] = min(worst['ram'], int(p[1]))
+        worst['isr'] = max(worst['isr'], int(p[2]))
+        worst['overruns'] += int(p[3])
     return dia, prf
 
 
@@ -146,3 +161,23 @@ print('end print:', send('S12')[0])
 diag('finale')
 print('totale ritrasmissioni:', stats)
 ser.close()
+
+problems = []
+if worst['ram'] < MIN_FREE_RAM:
+    problems.append('RAM libera al picco %d < %d' % (worst['ram'], MIN_FREE_RAM))
+if worst['isr'] > MAX_ISR_US:
+    problems.append('interrupt degli step %d us > %d' % (worst['isr'], MAX_ISR_US))
+if worst['overruns']:
+    problems.append('%d scadenze degli step mancate' % worst['overruns'])
+if worst['cs'] or worst['overflow'] or worst['ack'] or stats['retx'] or stats['e01']:
+    problems.append('errori sul collegamento: %s %s' % (worst, stats))
+
+print()
+print('RAM libera minima %d byte, interrupt massimo %d us, scadenze mancate %d'
+      % (worst['ram'], worst['isr'], worst['overruns']))
+if problems:
+    print('FALLITO:')
+    for line in problems:
+        print('  -', line)
+    sys.exit(1)
+print('OK: tutte le soglie rispettate')

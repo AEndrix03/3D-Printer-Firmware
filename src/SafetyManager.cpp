@@ -36,6 +36,9 @@ namespace SafetyManager {
     }
 
     void update() {
+        // RAM quasi esaurita: ci si ferma finche' le variabili sono ancora integre
+        if (!hal::stackGuardIntact()) emergencyStop(PSTR("STACK"));
+
         updatePowerManagement();
         TempController::update();
 

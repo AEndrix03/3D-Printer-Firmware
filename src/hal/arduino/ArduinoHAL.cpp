@@ -126,6 +126,16 @@ namespace hal {
         return count;
     }
 
+    bool stackGuardIntact() {
+        // Lo stack puo' scavalcare qualche byte senza scriverlo (variabili locali non
+        // inizializzate): si controlla una fascia intera, non un byte solo.
+        const uint8_t *p = (const uint8_t *) &__heap_start + STACK_GUARD_BYTES - 8;
+        for (uint8_t i = 0; i < 8; ++i) {
+            if (p[i] != STACK_CANARY) return false;
+        }
+        return true;
+    }
+
     class ArduinoSerial : public hal::Serial {
     public:
         void begin(uint32_t baud) override {
