@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "../include/controllers/TempController.hpp"
 #include "../include/Pins.hpp"
+#include "../include/hal/FastPin.hpp"
 #include "../include/Config.hpp"
 #include "../include/SafetyManager.hpp"
 #include "../include/StateMachine.hpp"
@@ -24,8 +25,65 @@ namespace {
     uint32_t watchStart = 0;
     float watchTemp = 0.0f;
 
+    // --- regolazione PID ---
+    float kp = HEATER_KP, ki = HEATER_KI, kd = HEATER_KD;
+    float integral = 0.0f;      // contributo integrale, gia' in unita' di uscita (0..255)
+    float previousTemp = 22.0f;
+    uint8_t duty = 0;           // uscita: 0 = spento, 255 = sempre acceso
+    uint32_t windowStart = 0;
+
+    // Scrittura diretta sul registro, non digitalWrite(): l'heater viene pilotato a ogni giro
+    // del ciclo principale, e sulla scheda reale digitalWrite() chiamata a quella cadenza
+    // faceva arrivare al PC righe con caratteri mancanti (misurato con tools/hw_bench.py:
+    // decine per prova con digitalWrite, zero cosi'). La causa esatta non e' stata chiarita.
     void heater(bool on) {
-        digitalWrite(PIN_HEATER, on ? HIGH : LOW);
+        hal::fastWrite(PIN_HEATER, on);
+    }
+
+    void heaterOff() {
+        duty = 0;
+        integral = 0.0f;
+        heater(false);
+    }
+
+    /** Applica l'uscita come tempo di accensione nella finestra. Chiamata a ogni giro del ciclo. */
+    void driveHeater() {
+        if (duty == 0) {
+            heater(false);
+            return;
+        }
+        if (duty == 255) {
+            heater(true);
+            return;
+        }
+        uint32_t phase = millis() - windowStart;
+        if (phase >= HEATER_PWM_WINDOW_MS) {
+            windowStart = millis();
+            phase = 0;
+        }
+        heater(phase < (uint32_t) duty * HEATER_PWM_WINDOW_MS / 255UL);
+    }
+
+    /** Un passo del regolatore, ogni UPDATE_INTERVAL_MS. */
+    void regulate() {
+        const float dt = UPDATE_INTERVAL_MS / 1000.0f;
+        const float error = targetTemp - currentTemp;
+
+        if (error > HEATER_PID_RANGE) {
+            duty = 255; // lontani dal target: piena potenza, l'integrale non si carica
+            integral = 0.0f;
+        } else if (error < -HEATER_PID_RANGE) {
+            duty = 0;
+            integral = 0.0f;
+        } else {
+            integral += ki * error * dt;
+            if (integral < 0.0f) integral = 0.0f;
+            if (integral > 255.0f) integral = 255.0f;
+            // derivata sulla misura (gia' filtrata), non sull'errore: un cambio di target non da' un colpo
+            const float output = kp * error + integral - kd * (currentTemp - previousTemp) / dt;
+            duty = output <= 0.0f ? 0 : output >= 255.0f ? 255 : (uint8_t) output;
+        }
+        previousTemp = currentTemp;
     }
 
     void restartWatch() {
@@ -56,7 +114,7 @@ namespace {
 namespace TempController {
     void init() {
         pinMode(PIN_HEATER, OUTPUT);
-        heater(false);
+        heaterOff();
         targetTemp = 0.0f;
         flags = FLAG_PROTECTION;
     }
@@ -70,7 +128,7 @@ namespace TempController {
     }
 
     void forceOff() {
-        heater(false);
+        heaterOff();
         targetTemp = 0.0f;
     }
 
@@ -101,18 +159,20 @@ namespace TempController {
     }
 
     void update() {
+        driveHeater(); // a ogni giro: e' cio' che da' risoluzione al tempo di accensione
+
         if (!TimeUtils::hasElapsed(lastUpdate, UPDATE_INTERVAL_MS)) return;
         lastUpdate = millis();
 
         if (!monitoringEnabled) {
-            heater(false);
+            heaterOff();
             return;
         }
 
         float t;
         if (!readThermistor(t)) {
             sensorFault = true;
-            heater(false);
+            heaterOff();
             if (targetTemp > 0.0f) SafetyManager::emergencyStop(PSTR("THERM_ERR"));
             return;
         }
@@ -132,16 +192,13 @@ namespace TempController {
         }
 
         if (targetTemp <= 0.0f || StateMachine::getState() == MachineState::Error) {
-            heater(false);
+            heaterOff();
+            previousTemp = currentTemp;
             return;
         }
 
-        // --- regolazione on/off con isteresi ---
-        if (currentTemp < targetTemp - TEMP_HYSTERESIS / 2) {
-            heater(true);
-        } else if (currentTemp > targetTemp + TEMP_HYSTERESIS / 2) {
-            heater(false);
-        }
+        regulate();
+        driveHeater();
 
         // --- protezione thermal runaway ---
         if (!(flags & FLAG_PROTECTION)) return;
@@ -215,6 +272,21 @@ namespace TempController {
                     flags &= ~FLAG_PROTECTION;
                 }
                 CompactResponse::sendCritical(PSTR("PRT"), (flags & FLAG_PROTECTION) ? PSTR("ON") : PSTR("OFF"));
+                break;
+            }
+            case 40: {
+                // Guadagni del PID: T40 P.. I.. D.. li imposta (quelli omessi restano), sempre li riporta
+                float v;
+                if (ParamParser::get(params, 'P', v) && v >= 0.0f) kp = v;
+                if (ParamParser::get(params, 'I', v) && v >= 0.0f) ki = v;
+                if (ParamParser::get(params, 'D', v) && v >= 0.0f) kd = v;
+                integral = 0.0f;
+                CompactResponse::begin(PSTR("PID"));
+                CompactResponse::addFloat(kp, 2);
+                CompactResponse::addFloat(ki, 3);
+                CompactResponse::addFloat(kd, 1);
+                CompactResponse::addInt(duty);
+                CompactResponse::end();
                 break;
             }
             case 0:

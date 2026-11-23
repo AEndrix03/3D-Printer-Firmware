@@ -1,3 +1,4 @@
+#include "../include/hal/FastPin.hpp"
 #include <Arduino.h>
 #include "../include/controllers/EndstopController.hpp"
 #include "../include/Pins.hpp"
@@ -25,19 +26,19 @@ namespace EndstopController {
 
     bool isTriggeredX() {
         if (!EndstopConfig::ENDSTOP_ENABLED_X) return false;
-        bool raw = digitalRead(PIN_ENDSTOP_X);
+        bool raw = hal::fastRead(PIN_ENDSTOP_X);
         return EndstopConfig::ENDSTOP_INVERTED_X ? (raw == HIGH) : (raw == LOW);
     }
 
     bool isTriggeredY() {
         if (!EndstopConfig::ENDSTOP_ENABLED_Y) return false;
-        bool raw = digitalRead(PIN_ENDSTOP_Y);
+        bool raw = hal::fastRead(PIN_ENDSTOP_Y);
         return EndstopConfig::ENDSTOP_INVERTED_Y ? (raw == HIGH) : (raw == LOW);
     }
 
     bool isTriggeredZ() {
         if (!EndstopConfig::ENDSTOP_ENABLED_Z) return false;
-        bool raw = digitalRead(PIN_ENDSTOP_Z);
+        bool raw = hal::fastRead(PIN_ENDSTOP_Z);
         return EndstopConfig::ENDSTOP_INVERTED_Z ? (raw == HIGH) : (raw == LOW);
     }
 

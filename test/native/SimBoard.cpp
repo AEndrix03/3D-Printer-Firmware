@@ -193,10 +193,41 @@ void delayMicroseconds(unsigned int) {}
 
 void pinMode(uint8_t, uint8_t) {}
 
+namespace {
+    // Hotend simulato: blocco riscaldato piu' sensore con ritardo. A piena potenza tende a
+    // ambiente + 300 gradi con costante di tempo di 100 s; il termistore segue con 4 s.
+    bool thermalModel = false;
+    double blockTemp = 25.0, sensorTemp = 25.0, heaterPower = 1.0;
+    uint64_t thermalClock = 0;
+    constexpr double AMBIENT = 25.0, FULL_POWER_RISE = 300.0, BLOCK_TAU = 100.0, SENSOR_TAU = 4.0;
+
+    /// Porta il modello all'istante attuale (pinMutex gia' preso).
+    void advanceThermalModel() {
+        const uint64_t now = simMicros();
+        double remaining = (double) (now - thermalClock) / 1e6;
+        thermalClock = now;
+        if (remaining > 3600.0) remaining = 3600.0;
+        const double duty = pins[PIN_HEATER] ? heaterPower : 0.0;
+        while (remaining > 0.0) {
+            const double dt = remaining > 0.05 ? 0.05 : remaining;
+            blockTemp += (duty * FULL_POWER_RISE - (blockTemp - AMBIENT)) / BLOCK_TAU * dt;
+            sensorTemp += (blockTemp - sensorTemp) / SENSOR_TAU * dt;
+            remaining -= dt;
+        }
+    }
+
+    int adcFor(double celsius) {
+        const double r = 100000.0 * std::exp(3950.0 * (1.0 / (celsius + 273.15) - 1.0 / 298.15));
+        return (int) std::lround(1023.0 * r / (r + 4700.0));
+    }
+}
+
 void digitalWrite(uint8_t pin, uint8_t value) {
     std::lock_guard<std::mutex> lock(pinMutex);
     const bool level = value != LOW;
     const bool rising = level && !pins[pin];
+    // il modello termico va portato a questo istante con il vecchio stato dell'heater
+    if (thermalModel && pin == PIN_HEATER && level != pins[pin]) advanceThermalModel();
     pins[pin] = level;
     if (!rising) return;
 
@@ -219,6 +250,10 @@ int digitalRead(uint8_t pin) {
 
 int analogRead(uint8_t pin) {
     std::lock_guard<std::mutex> lock(pinMutex);
+    if (thermalModel && pin == PIN_THERMISTOR) {
+        advanceThermalModel();
+        return adcFor(sensorTemp);
+    }
     return analogValues[pin];
 }
 
@@ -516,4 +551,18 @@ namespace sim {
     int watchdogBites() { return bites.load(); }
 
     void breakStackGuard(bool broken) { stackGuardBroken = broken; }
+
+    void enableThermalModel(bool enabled, double startCelsius, double power) {
+        std::lock_guard<std::mutex> lock(pinMutex);
+        thermalModel = enabled;
+        blockTemp = sensorTemp = startCelsius;
+        heaterPower = power;
+        thermalClock = simMicros();
+    }
+
+    double modelTemperature() {
+        std::lock_guard<std::mutex> lock(pinMutex);
+        if (thermalModel) advanceThermalModel();
+        return blockTemp;
+    }
 }

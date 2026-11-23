@@ -96,6 +96,7 @@ Vedi `contracts/*.json`. In sintesi:
 | `A10/A11/A12 E F` | estrusione / ritrazione / spurgo |
 | `T10 S<gradi>` | target hotend (rifiutato con `NO_SENSOR` se il termistore e' disabilitato) |
 | `T20` | temperatura -> `CRT TMP <attuale> <target>` |
+| `T40 [P..] [I..] [D..]` | guadagni del PID dell'hotend (quelli omessi restano) -> `PID <kp> <ki> <kd> <uscita 0-255>` |
 | `S0 [X] [Y] [Z]` | homing degli assi indicati, tutti se omessi (solo da Idle) |
 | `S1` / `S12` | inizio / fine stampa (Idle <-> Printing) |
 | `S2` / `S3` | pausa / ripresa |
@@ -119,6 +120,58 @@ dal driver con errore di corda di 0,02 mm e raccordati dal planner del firmware.
   dell'interrupt, scadenze mancate, errori sul collegamento): va rieseguito sulla scheda
   dopo ogni modifica al firmware.
 
+### Misure del collegamento
+
+`tools/linktest` contiene uno sketch senza logica di stampa e uno script che misurano il solo
+giro del comando (scheda + adattatore USB + PC) al variare di formato, baud e numero di
+comandi inviati senza attendere la risposta ("finestra"). Comandi al secondo misurati:
+
+| Comando | 115200, finestra 1 | 115200, finestra 3-4 | 250000, finestra 3 |
+|---------|--------------------|----------------------|--------------------|
+| oggi: testo con decimali, 38 byte | 111 | (non entra nel buffer da 64) | - |
+| pianificato dal PC, testo, 50 byte | 100 | (non entra) | - |
+| pianificato dal PC, testo compatto, 33 byte | 125 | 284 | 501 |
+| pianificato dal PC, binario, 20 byte | 148 | 497 | 995 |
+
+Cosa dicono:
+
+- attendere ogni risposta costa 4-6 ms fissi di USB, qualunque sia il baud: e' la finestra
+  la leva principale, non la velocita' della linea;
+- con la finestra il limite diventa il numero di byte del comando, quindi il formato binario
+  vale quasi il doppio del testo;
+- accorciare la risposta non aiuta (a volte peggiora, per come l'adattatore USB raggruppa i byte);
+- oltre 250000 baud non si guadagna nulla: il limite e' il millisecondo del frame USB.
+
+Il firmware reale oggi fa ~79 movimenti al secondo perche' a questi tempi aggiunge ~4,7 ms di
+pianificazione per segmento.
+
+- **Guardia sullo stack.** Se lo stack arriva a meno di 128 byte dalle variabili il firmware
+  spegne l'heater, ferma i motori e invia `ALM STACK`: sull'ATmega non c'e' protezione di
+  memoria, e oltre quel punto le variabili verrebbero sovrascritte in silenzio. Non e' un
+  errore da azzerare e proseguire: indica che il firmware va alleggerito.
+
+### Regolazione della temperatura
+
+L'heater e' regolato da un PID (`Config.hpp`: `HEATER_KP`, `HEATER_KI`, `HEATER_KD`), calcolato
+4 volte al secondo. L'uscita (0-255) diventa tempo di accensione dentro una finestra di 1 s,
+aggiornata a ogni giro del ciclo principale; oltre 10 gradi dal target l'heater e' tutto acceso
+o tutto spento. Le protezioni (sensore guasto, temperatura massima, riscaldamento che non sale,
+calo a regime, host sparito) restano quelle di prima e hanno la precedenza.
+
+I guadagni di default sono valori tipici per un hotend da 40 W e **vanno tarati sull'hardware
+reale**: `T40 P.. I.. D..` (o `M301` dal driver) li cambia senza riprogrammare. Sul modello
+termico del simulatore il regolatore arriva a 200 gradi senza superare 205 e resta entro
++-1 grado a regime (scenario e2e "PID temperature regulation").
+
+### Una regola sugli ingressi e le uscite
+
+Nei percorsi eseguiti a ogni giro del ciclo principale (heater, finecorsa) si usa la scrittura
+diretta sui registri (`hal::fastWrite` / `fastRead`), mai `digitalWrite()` di Arduino. Sulla
+scheda reale `digitalWrite()` chiamata a quella cadenza faceva arrivare al PC righe con
+caratteri mancanti: decine per prova, contro zero con la scrittura diretta e zero con un
+ritardo puro della stessa durata. Il meccanismo non e' stato chiarito; `tools/hw_bench.py`
+verifica il checksum di ogni riga e fallisce se ne arriva rovinata piu' di una.
+
 ### Misure sulla scheda reale
 
 `tools/hw_bench.py <porta>` esegue sulla scheda movimenti veloci, a quattro assi e flussi di
@@ -127,8 +180,8 @@ segmenti corti, e stampa `DIA`/`PRF` dopo ogni fase. Valori misurati su un ATmeg
 
 | Grandezza | Valore |
 |-----------|--------|
-| RAM minima rimasta libera (picco di stack) | 839 byte (606 prima del driver seriale proprio) |
-| Durata massima dell'interrupt degli step | 64 us (124 prima della tabella degli intervalli) |
+| RAM minima rimasta libera (picco di stack) | 848 byte (606 all'inizio) |
+| Durata massima dell'interrupt degli step | 67 us (124 prima della tabella degli intervalli) |
 | Scadenze degli step mancate | 0 |
 | Errori di checksum / ritrasmissioni su ~2000 comandi | 0 |
 | Giro completo di un comando senza lavoro (`S10`) | 7,9 ms |

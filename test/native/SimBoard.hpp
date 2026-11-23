@@ -86,4 +86,14 @@ namespace sim {
 
     /// Simula lo stack che entra nella zona di guardia (sul PC non c'e' uno stack da misurare).
     void breakStackGuard(bool broken);
+
+    /**
+     * Hotend simulato: il termistore non segue piu' setAnalog ma un modello termico pilotato
+     * dal pin dell'heater (blocco con costante di tempo di 100 s, sensore in ritardo di 4 s).
+     * @param power frazione della potenza nominale (1.0 = heater da progetto)
+     */
+    void enableThermalModel(bool enabled, double startCelsius = 25.0, double power = 1.0);
+
+    /// Temperatura reale del blocco simulato (non quella letta dal sensore).
+    double modelTemperature();
 }

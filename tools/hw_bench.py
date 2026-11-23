@@ -13,7 +13,7 @@ import serial
 PORT = sys.argv[1] if len(sys.argv) > 1 else 'COM3'
 ser = serial.Serial(PORT, 115200, timeout=0.05)
 n = 0
-stats = {'retx': 0, 'e01': 0, 'timeouts': 0}
+stats = {'retx': 0, 'e01': 0, 'timeouts': 0, 'rx_corrupt': 0}
 TERMINAL = re.compile(r'^(OK0|E0\d|EM0|ET0|ES\d) N(\d+)(?: D(\d+))?')
 
 
@@ -68,6 +68,17 @@ def send(body, sync=False, timeout=8.0, quiet=True):
             stats['timeouts'] += 1
         stats['retx'] += 1
     raise RuntimeError('no answer to %r' % body)
+
+
+def checksum_ok(line):
+    """Le righe del firmware finiscono con ' *<xor dei caratteri precedenti>'."""
+    body, star, tail = line.rpartition(' *')
+    if not star or not tail.isdigit():
+        return False
+    cs = 0
+    for ch in body.encode('latin1'):
+        cs ^= ch
+    return cs == int(tail)
 
 
 def crc_update(crc, data):
@@ -129,8 +140,13 @@ def stream(moves, timeout=8.0):
         if not m:
             continue
         code, rn = m.group(1), int(m.group(2))
-        if code in ('OK0', 'E03') and pending and rn == pending[0][0]:
-            pending.pop(0)
+        if not checksum_ok(line):
+            stats['rx_corrupt'] += 1  # riga arrivata rovinata: si ignora, come fa il driver
+            continue
+        if code in ('OK0', 'E03') and pending and rn >= pending[0][0] and rn <= pending[-1][0]:
+            # conferma cumulativa: l'OK di un movimento vale anche per quelli prima di lui
+            while pending and pending[0][0] <= rn:
+                pending.pop(0)
         elif code in ('E01', 'E04'):
             stats['e01'] += 1
             stats['retx'] += 1
@@ -244,12 +260,14 @@ if worst['isr'] > MAX_ISR_US:
     problems.append('interrupt degli step %d us > %d' % (worst['isr'], MAX_ISR_US))
 if worst['overruns']:
     problems.append('%d scadenze degli step mancate' % worst['overruns'])
-if worst['cs'] or worst['overflow'] or worst['ack'] or stats['retx'] or stats['e01']:
+if worst['cs'] or worst['overflow'] or worst['ack'] or stats['retx'] or stats['e01'] or stats['rx_corrupt'] > 1:
     problems.append('errori sul collegamento: %s %s' % (worst, stats))
 
 print()
 print('RAM libera minima %d byte, interrupt massimo %d us, scadenze mancate %d'
       % (worst['ram'], worst['isr'], worst['overruns']))
+if stats['rx_corrupt']:
+    print('righe del firmware arrivate rovinate al PC: %d (scartate dal checksum, nessun effetto)' % stats['rx_corrupt'])
 if problems:
     print('FALLITO:')
     for line in problems:

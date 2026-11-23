@@ -6,6 +6,7 @@
 #include <avr/wdt.h>
 #include <avr/interrupt.h>
 #include "../../include/Pins.hpp"
+#include "../../include/hal/FastPin.hpp"
 
 // ---------------------------------------------------------------------------
 // Reset cause tracking.
@@ -41,7 +42,7 @@ void captureResetFlags() {
 // Il watchdog lavora in modalita' interrupt+reset: prima di resettare spegne
 // l'heater e registra la causa, poi forza il reset entro 15 ms.
 ISR(WDT_vect) {
-    digitalWrite(PIN_HEATER, LOW);
+    hal::fastWrite(PIN_HEATER, false);
     bootInfo.magic = BOOT_MAGIC;
     bootInfo.cause = hal::RESET_WATCHDOG;
     wdt_enable(WDTO_15MS);
