@@ -24,7 +24,7 @@ namespace BusyHandler {
 
     void update() {
         if (active && TimeUtils::hasElapsed(lastBusyTime, BUSY_INTERVAL)) {
-            hal::serial->println(F("BUSY"));
+            hal::serial::writeP(PSTR("BUSY\r\n"));
             lastBusyTime = hal::halMillis();
         }
     }

@@ -2,7 +2,6 @@
 #include "../include/controllers/ExtruderController.hpp"
 #include "../include/controllers/MotionController.hpp"
 #include "../include/controllers/TempController.hpp"
-#include "../include/hal/drivers/stepper/A4988Stepper.hpp"
 #include "../include/hal/drivers/StepperConfig.hpp"
 #include "../include/Pins.hpp"
 #include "../include/extruder/ExtruderConfig.hpp"
@@ -10,8 +9,6 @@
 #include "../include/CompactResponse.hpp"
 
 namespace {
-    // Usato solo per configurare i pin: gli step li genera lo Stepper
-    A4988Stepper stepperE(PIN_E_STEP, PIN_E_DIR);
     float stepsPerMm = ExtruderConfig::STEPS_PER_MM_E;
 
     /** Estrusione relativa in mm (accodata), con controllo di estrusione a freddo. */
@@ -27,7 +24,8 @@ namespace {
 
 namespace ExtruderController {
     void init() {
-        stepperE.init(StepperConfig::STEPPER_INVERT_E);
+        pinMode(PIN_E_STEP, OUTPUT);
+        pinMode(PIN_E_DIR, OUTPUT);
     }
 
     float getStepsPerMm() {

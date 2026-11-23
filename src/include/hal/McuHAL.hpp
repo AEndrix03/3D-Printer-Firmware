@@ -3,9 +3,6 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// Forward declare FlashStringHelper for F() macro support
-class __FlashStringHelper;
-
 namespace hal {
 
     // ===== GPIO =====
@@ -39,47 +36,27 @@ namespace hal {
     void delayMicroseconds(uint32_t us);
 
     // ===== Serial =====
-    class Serial {
-    public:
-        virtual void begin(uint32_t baud) = 0;
+    // Funzioni libere, risolte in compilazione: ogni piattaforma fornisce la propria
+    // implementazione (nessuna tabella virtuale, nessuna chiamata indiretta).
+    namespace serial {
+        void begin(uint32_t baud);
 
-        virtual void end() = 0;
+        /// Byte ricevuti e non ancora letti.
+        uint8_t available();
 
-        virtual int available() = 0;
+        /// Prossimo byte ricevuto, -1 se non ce ne sono.
+        int read();
 
-        virtual int read() = 0;
+        void write(uint8_t byte);
 
-        virtual size_t write(uint8_t byte) = 0;
+        void write(const uint8_t *buffer, uint8_t size);
 
-        virtual size_t write(const uint8_t *buffer, size_t size) = 0;
+        /// Scrive una stringa che vive in flash (PSTR).
+        void writeP(const char *flashText);
 
-        virtual size_t print(const char *str) = 0;
-
-        virtual size_t println(const char *str) = 0;
-
-        virtual size_t print(int value) = 0;
-
-        virtual size_t println(int value) = 0;
-
-        virtual size_t print(float value, int decimals = 2) = 0;
-
-        virtual size_t println(float value, int decimals = 2) = 0;
-
-        virtual size_t print(uint32_t value) = 0;
-
-        virtual size_t println(uint32_t value) = 0;
-
-        virtual void flush() = 0;
-
-        virtual operator bool() = 0;
-
-        // F() macro support
-        virtual size_t print(const __FlashStringHelper *str) = 0;
-
-        virtual size_t println(const __FlashStringHelper *str) = 0;
-    };
-
-    extern Serial *serial;
+        /// Ritorna quando l'ultimo byte scritto e' uscito dal filo.
+        void flush();
+    }
 
     // ===== Interrupt =====
     /// Disabilita gli interrupt e restituisce lo stato precedente (sezioni critiche annidabili).

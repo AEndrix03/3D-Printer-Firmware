@@ -9,51 +9,35 @@
 #include "../include/CompactResponse.hpp"
 
 namespace {
+    // Catene di if al posto degli switch: per uno switch che restituisce puntatori il
+    // compilatore genera una tabella, e sull'AVR le tabelle finiscono in RAM.
     PGM_P stateName() {
-        switch (StateMachine::getState()) {
-            case MachineState::Idle:
-                return PSTR("Idle");
-            case MachineState::Homing:
-                return PSTR("Homing");
-            case MachineState::Printing:
-                return PSTR("Printing");
-            case MachineState::Paused:
-                return PSTR("Paused");
-            default:
-                return PSTR("Error");
-        }
+        const MachineState state = StateMachine::getState();
+        if (state == MachineState::Idle) return PSTR("Idle");
+        if (state == MachineState::Homing) return PSTR("Homing");
+        if (state == MachineState::Printing) return PSTR("Printing");
+        if (state == MachineState::Paused) return PSTR("Paused");
+        return PSTR("Error");
     }
 
     PGM_P powerName() {
-        switch (SafetyManager::getPowerState()) {
-            case SafetyManager::ACTIVE:
-                return PSTR("Active");
-            case SafetyManager::IDLE:
-                return PSTR("Idle");
-            case SafetyManager::SLEEP:
-                return PSTR("Sleep");
-            default:
-                return PSTR("Deep");
-        }
+        const SafetyManager::PowerState state = SafetyManager::getPowerState();
+        if (state == SafetyManager::ACTIVE) return PSTR("Active");
+        if (state == SafetyManager::IDLE) return PSTR("Idle");
+        if (state == SafetyManager::SLEEP) return PSTR("Sleep");
+        return PSTR("Deep");
     }
 }
 
 namespace SystemController {
     PGM_P resetCauseName() {
-        switch (hal::getResetCause()) {
-            case hal::RESET_POWERON:
-                return PSTR("POWERON");
-            case hal::RESET_EXTERNAL:
-                return PSTR("EXTERNAL");
-            case hal::RESET_BROWNOUT:
-                return PSTR("BROWNOUT");
-            case hal::RESET_WATCHDOG:
-                return PSTR("WDT");
-            case hal::RESET_SOFT:
-                return PSTR("SOFT");
-            default:
-                return PSTR("UNKNOWN");
-        }
+        const hal::ResetCause cause = hal::getResetCause();
+        if (cause == hal::RESET_POWERON) return PSTR("POWERON");
+        if (cause == hal::RESET_EXTERNAL) return PSTR("EXTERNAL");
+        if (cause == hal::RESET_BROWNOUT) return PSTR("BROWNOUT");
+        if (cause == hal::RESET_WATCHDOG) return PSTR("WDT");
+        if (cause == hal::RESET_SOFT) return PSTR("SOFT");
+        return PSTR("UNKNOWN");
     }
 
     void handle(uint8_t code, const char *params) {

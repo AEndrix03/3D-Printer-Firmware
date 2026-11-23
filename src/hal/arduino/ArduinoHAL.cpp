@@ -56,6 +56,26 @@ namespace {
     volatile uint16_t handlerOverruns = 0;
 }
 
+namespace {
+    constexpr uint8_t RX_SIZE = 64; // potenza di 2
+    constexpr uint8_t RX_MASK = RX_SIZE - 1;
+
+    volatile uint8_t rxBuffer[RX_SIZE];
+    volatile uint8_t rxHead = 0; // scritto solo dall'interrupt
+    volatile uint8_t rxTail = 0; // scritto solo dal ciclo principale
+    bool txUsed = false;
+}
+
+ISR(USART_RX_vect) {
+    const uint8_t byte = UDR0;
+    const uint8_t next = (uint8_t) (rxHead + 1) & RX_MASK;
+    // Anello pieno: il byte viene scartato, se ne accorge il checksum del comando
+    if (next != rxTail) {
+        rxBuffer[rxHead] = byte;
+        rxHead = next;
+    }
+}
+
 ISR(TIMER1_COMPA_vect) {
     if (stepHandler) stepHandler();
 
@@ -136,33 +156,58 @@ namespace hal {
         return true;
     }
 
-    class ArduinoSerial : public hal::Serial {
-    public:
-        void begin(uint32_t baud) override {
-            ::Serial.begin(baud);
+    // -----------------------------------------------------------------------
+    // Seriale: driver USART minimo al posto di HardwareSerial di Arduino.
+    //  - ricezione in interrupt su un anello di RX_SIZE byte;
+    //  - trasmissione bloccante, senza buffer: le risposte vengono gia' composte
+    //    per intero in CompactResponse, un secondo buffer sarebbe RAM sprecata.
+    //    Gli interrupt restano attivi, quindi step e ricezione non si fermano.
+    // -----------------------------------------------------------------------
+    namespace serial {
+        void begin(uint32_t baud) {
+            const uint8_t state = irqSave();
+            UCSR0A = _BV(U2X0); // 8 campioni per bit: errore di baud minore a 16 MHz
+            UBRR0 = (uint16_t) ((F_CPU / 4 / baud - 1) / 2);
+            UCSR0C = _BV(UCSZ01) | _BV(UCSZ00); // 8N1
+            UCSR0B = _BV(RXEN0) | _BV(TXEN0) | _BV(RXCIE0);
+            rxHead = rxTail = 0;
+            irqRestore(state);
         }
 
-        void end() override { ::Serial.end(); }
-        int available() override { return ::Serial.available(); }
-        int read() override { return ::Serial.read(); }
-        size_t write(uint8_t byte) override { return ::Serial.write(byte); }
-        size_t write(const uint8_t *buffer, size_t size) override { return ::Serial.write(buffer, size); }
-        size_t print(const char *str) override { return ::Serial.print(str); }
-        size_t println(const char *str) override { return ::Serial.println(str); }
-        size_t print(int value) override { return ::Serial.print(value); }
-        size_t println(int value) override { return ::Serial.println(value); }
-        size_t print(float value, int decimals) override { return ::Serial.print(value, decimals); }
-        size_t println(float value, int decimals) override { return ::Serial.println(value, decimals); }
-        size_t print(uint32_t value) override { return ::Serial.print(value); }
-        size_t println(uint32_t value) override { return ::Serial.println(value); }
-        size_t print(const __FlashStringHelper *str) override { return ::Serial.print(str); }
-        size_t println(const __FlashStringHelper *str) override { return ::Serial.println(str); }
-        void flush() override { ::Serial.flush(); }
-        operator bool() override { return ::Serial; }
-    };
+        uint8_t available() {
+            return (uint8_t) (rxHead - rxTail) & RX_MASK;
+        }
 
-    static ArduinoSerial arduinoSerial;
-    Serial *serial = &arduinoSerial;
+        int read() {
+            if (rxHead == rxTail) return -1;
+            const uint8_t value = rxBuffer[rxTail];
+            rxTail = (uint8_t) (rxTail + 1) & RX_MASK;
+            return value;
+        }
+
+        void write(uint8_t byte) {
+            while (!(UCSR0A & _BV(UDRE0))) {}
+            txUsed = true;
+            UCSR0A |= _BV(TXC0); // azzera il flag di fine trasmissione (si azzera scrivendo 1)
+            UDR0 = byte;
+        }
+
+        void write(const uint8_t *buffer, uint8_t size) {
+            while (size--) write(*buffer++);
+        }
+
+        void writeP(const char *flashText) {
+            uint8_t c;
+            while ((c = pgm_read_byte(flashText++)) != 0) write(c);
+        }
+
+        void flush() {
+            if (!(UCSR0B & _BV(TXEN0))) return;
+            while (!(UCSR0A & _BV(UDRE0))) {}
+            // TXC e' valido solo dopo almeno una scrittura: UDRE vuoto + TXC = filo libero
+            while (!(UCSR0A & _BV(TXC0)) && txUsed) {}
+        }
+    }
 
     void halPinMode(uint8_t pin, HalPinMode mode) {
         switch (mode) {
@@ -232,7 +277,7 @@ namespace hal {
     }
 
     void reset() {
-        ::Serial.flush();
+        serial::flush();
         cli();
         bootInfo.magic = BOOT_MAGIC;
         bootInfo.cause = RESET_SOFT;

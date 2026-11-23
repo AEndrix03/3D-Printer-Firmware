@@ -81,7 +81,7 @@ def wait_idle(limit=120.0):
 
 
 # Soglie di accettazione: una modifica al firmware che le supera non va tenuta.
-MIN_FREE_RAM = 300      # byte liberi al picco di stack
+MIN_FREE_RAM = 600      # byte liberi al picco di stack
 MAX_ISR_US = 130        # durata massima dell'interrupt degli step
 worst = {'ram': 99999, 'isr': 0, 'overruns': 0, 'cs': 0, 'overflow': 0, 'ack': 0}
 

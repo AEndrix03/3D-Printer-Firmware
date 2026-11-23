@@ -37,9 +37,18 @@ namespace {
     }
 
     void transmit(uint8_t cs) {
-        hal::serial->write((const uint8_t *) txBuf, txLen);
-        hal::serial->print(F(" *"));
-        hal::serial->println((int) cs);
+        // coda " *<checksum>\r\n" composta a mano: niente conversioni generiche
+        char tail[8];
+        uint8_t n = 0;
+        tail[n++] = ' ';
+        tail[n++] = '*';
+        if (cs >= 100) tail[n++] = (char) ('0' + cs / 100);
+        if (cs >= 10) tail[n++] = (char) ('0' + (cs / 10) % 10);
+        tail[n++] = (char) ('0' + cs % 10);
+        tail[n++] = '\r';
+        tail[n++] = '\n';
+        hal::serial::write((const uint8_t *) txBuf, txLen);
+        hal::serial::write((const uint8_t *) tail, n);
     }
 
     /**
@@ -54,8 +63,8 @@ namespace {
 
         while (hal::halMillis() - start < ACK_TIMEOUT_MS) {
             hal::watchdog::reset();
-            while (hal::serial->available()) {
-                const char c = (char) hal::serial->read();
+            while (hal::serial::available()) {
+                const char c = (char) hal::serial::read();
                 if (c == 'A') {
                     digits = 0;
                     value = 0;
@@ -151,10 +160,10 @@ namespace CompactResponse {
         for (uint8_t attempt = 0; attempt < ACK_MAX_ATTEMPTS; ++attempt) {
             // Scarta eventuali byte vecchi: il protocollo e' stop-and-wait,
             // qui l'host non puo' avere comandi validi in volo.
-            while (hal::serial->available()) hal::serial->read();
+            while (hal::serial::available()) hal::serial::read();
 
             transmit(cs);
-            hal::serial->flush();
+            hal::serial::flush();
 
             if (waitForAck(cs)) return;
         }

@@ -31,10 +31,10 @@ void Application::init() {
     hal::init();
 
     bootTime = hal::halMillis();
-    hal::serial->begin(115200);
+    hal::serial::begin(115200);
 
     // Banner riconosciuto dal driver; la riga BOOT ne indica la causa (WDT, BROWNOUT, ...)
-    hal::serial->println(F("Avvio firmware 3DP..."));
+    hal::serial::writeP(PSTR("Avvio firmware 3DP...\r\n"));
     CompactResponse::sendData(PSTR("BOOT"), SystemController::resetCauseName());
 
     // Initialize core modules
@@ -52,7 +52,7 @@ void Application::init() {
 
     WatchdogHandler::enable();
 
-    hal::serial->println(F("Sistema pronto."));
+    hal::serial::writeP(PSTR("Sistema pronto.\r\n"));
     lastReadyMessage = hal::halMillis();
 }
 
@@ -70,7 +70,7 @@ void Application::loop() {
     if (!systemReady &&
         uptime > BOOT_GRACE_PERIOD &&
         TimeUtils::hasElapsed(lastReadyMessage, READY_MESSAGE_INTERVAL)) {
-        hal::serial->println(F("Sistema pronto."));
+        hal::serial::writeP(PSTR("Sistema pronto.\r\n"));
         lastReadyMessage = hal::halMillis();
     }
 

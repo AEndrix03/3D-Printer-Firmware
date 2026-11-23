@@ -154,7 +154,7 @@ segmenti corti, e stampa `DIA`/`PRF` dopo ogni fase. Valori misurati su un ATmeg
 
 | Grandezza | Valore |
 |-----------|--------|
-| RAM minima rimasta libera (picco di stack) | 606 byte |
+| RAM minima rimasta libera (picco di stack) | 839 byte (606 prima del driver seriale proprio) |
 | Durata massima dell'interrupt degli step | 117-124 us |
 | Scadenze degli step mancate | 0 |
 | Errori di checksum / ritrasmissioni su ~2000 comandi | 0 |

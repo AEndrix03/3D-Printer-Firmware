@@ -8,47 +8,24 @@
 
 namespace hal {
 
-    class ESP32Serial : public hal::Serial {
-    public:
-        void begin(uint32_t baud) override { ::Serial.begin(baud); }
+    namespace serial {
+        void begin(uint32_t baud) { ::Serial.begin(baud); }
 
-        void end() override { ::Serial.end(); }
+        uint8_t available() {
+            const int n = ::Serial.available();
+            return n > 255 ? 255 : (uint8_t) n;
+        }
 
-        int available() override { return ::Serial.available(); }
+        int read() { return ::Serial.read(); }
 
-        int read() override { return ::Serial.read(); }
+        void write(uint8_t byte) { ::Serial.write(byte); }
 
-        size_t write(uint8_t byte) override { return ::Serial.write(byte); }
+        void write(const uint8_t *buffer, uint8_t size) { ::Serial.write(buffer, size); }
 
-        size_t write(const uint8_t *buffer, size_t size) override { return ::Serial.write(buffer, size); }
+        void writeP(const char *flashText) { ::Serial.print(flashText); }
 
-        size_t print(const char *str) override { return ::Serial.print(str); }
-
-        size_t println(const char *str) override { return ::Serial.println(str); }
-
-        size_t print(int value) override { return ::Serial.print(value); }
-
-        size_t println(int value) override { return ::Serial.println(value); }
-
-        size_t print(float value, int decimals) override { return ::Serial.print(value, decimals); }
-
-        size_t println(float value, int decimals) override { return ::Serial.println(value, decimals); }
-
-        size_t print(uint32_t value) override { return ::Serial.print(value); }
-
-        size_t println(uint32_t value) override { return ::Serial.println(value); }
-
-        size_t print(const __FlashStringHelper *str) override { return ::Serial.print(str); }
-
-        size_t println(const __FlashStringHelper *str) override { return ::Serial.println(str); }
-
-        void flush() override { ::Serial.flush(); }
-
-        operator bool() override { return ::Serial; }
-    };
-
-    static ESP32Serial esp32Serial;
-    Serial *serial = &esp32Serial;
+        void flush() { ::Serial.flush(); }
+    }
 
     void halPinMode(uint8_t pin, HalPinMode mode) {
         switch (mode) {

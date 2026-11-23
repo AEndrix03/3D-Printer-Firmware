@@ -11,7 +11,6 @@
 #include "../include/motion/Stepper.hpp"
 #include "../include/endstop/EndstopConfig.hpp"
 #include "../include/hal/drivers/StepperConfig.hpp"
-#include "../include/hal/drivers/stepper/A4988Stepper.hpp"
 #include "../include/BusyHandler.hpp"
 #include "../include/ParamParser.hpp"
 #include "../include/hal/McuHAL.hpp"
@@ -24,11 +23,6 @@ namespace {
     using Planner::AX_E;
     using Planner::AX_COUNT;
 
-    // Usati solo per configurare i pin: gli step li genera lo Stepper in interrupt
-    A4988Stepper stepperX(PIN_X_STEP, PIN_X_DIR);
-    A4988Stepper stepperY(PIN_Y_STEP, PIN_Y_DIR);
-    A4988Stepper stepperZ(PIN_Z_STEP, PIN_Z_DIR);
-
     float eRemainder = 0.0f;      // frazione di step E non ancora eseguita (evita deriva di estrusione)
     float lastFeedrate = 1000.0f; // F e' modale
     bool abortRequested = false;
@@ -36,8 +30,12 @@ namespace {
     bool motorsOn = false;
     uint8_t limitAxes = 0;        // bit per asse: posizione riferita, i limiti di corsa valgono
 
-    const float STEPS_PER_MM[3] = {MotionConfig::STEPS_PER_MM_X, MotionConfig::STEPS_PER_MM_Y,
-                                   MotionConfig::STEPS_PER_MM_Z};
+    /** Step per millimetro dell'asse (costanti di compilazione: nessuna tabella in RAM). */
+    inline float stepsPerMm(uint8_t axis) {
+        if (axis == AX_X) return MotionConfig::STEPS_PER_MM_X;
+        if (axis == AX_Y) return MotionConfig::STEPS_PER_MM_Y;
+        return MotionConfig::STEPS_PER_MM_Z;
+    }
 
     const int32_t TRAVEL_MAX_STEPS[3] PROGMEM = {
             (int32_t) (MotionConfig::TRAVEL_MAX_X * MotionConfig::STEPS_PER_MM_X),
@@ -76,8 +74,8 @@ namespace {
         hal::watchdog::reset();
         BusyHandler::update();
         SafetyManager::update();
-        while (hal::serial->available()) {
-            if (hal::serial->read() == '!') MotionController::abort();
+        while (hal::serial::available()) {
+            if (hal::serial::read() == '!') MotionController::abort();
         }
         return !abortRequested && StateMachine::getState() != MachineState::Error;
     }
@@ -127,7 +125,7 @@ namespace {
 
         for (uint8_t a = 0; a < 3; ++a) {
             if (ParamParser::get(params, (char) ('X' + a), v)) {
-                delta[a] = lround(v * STEPS_PER_MM[a]) - (absolute ? Planner::position(a) : 0);
+                delta[a] = lround(v * stepsPerMm(a)) - (absolute ? Planner::position(a) : 0);
             }
         }
         if (!withinTravel(delta)) {
@@ -194,7 +192,7 @@ namespace {
         sendAxisEvent(PSTR("HOM"), name, PSTR("START"));
 
         if (!isTriggered()) {
-            if (seek(axis, false, (int32_t) (maxTravelMm * STEPS_PER_MM[axis]), feedrate, true, 0) < 0) return false;
+            if (seek(axis, false, (int32_t) (maxTravelMm * stepsPerMm(axis)), feedrate, true, 0) < 0) return false;
             if (!Stepper::endstopHit()) {
                 sendAxisEvent(PSTR("HOM"), name, PSTR("FAIL"));
                 CompactResponse::setResult(CompactResponse::REJECTED_ERROR);
@@ -236,9 +234,13 @@ namespace {
 
 namespace MotionController {
     void init() {
-        stepperX.init(StepperConfig::STEPPER_INVERT_X);
-        stepperY.init(StepperConfig::STEPPER_INVERT_Y);
-        stepperZ.init(StepperConfig::STEPPER_INVERT_Z);
+        // Step e direzione: uscite. Il verso (STEPPER_INVERT_*) lo applica lo Stepper.
+        pinMode(PIN_X_STEP, OUTPUT);
+        pinMode(PIN_X_DIR, OUTPUT);
+        pinMode(PIN_Y_STEP, OUTPUT);
+        pinMode(PIN_Y_DIR, OUTPUT);
+        pinMode(PIN_Z_STEP, OUTPUT);
+        pinMode(PIN_Z_DIR, OUTPUT);
 
         abortRequested = false;
         referenced = false;
@@ -348,7 +350,7 @@ namespace MotionController {
                 float v;
                 for (uint8_t a = 0; a < 3; ++a) {
                     if (ParamParser::get(params, (char) ('X' + a), v)) {
-                        const int32_t steps = lround(v * STEPS_PER_MM[a]);
+                        const int32_t steps = lround(v * stepsPerMm(a));
                         Stepper::setPosition(a, steps);
                         Planner::setPosition(a, steps);
                         limitAxes |= (uint8_t) (1 << a);

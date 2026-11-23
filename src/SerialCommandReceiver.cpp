@@ -93,8 +93,8 @@ namespace {
 }
 
 void SerialCommandReceiver::update() {
-    while (hal::serial->available()) {
-        const char c = (char) hal::serial->read();
+    while (hal::serial::available()) {
+        const char c = (char) hal::serial::read();
 
         if (c == '!') {
             // Carattere in tempo reale: arresto controllato del movimento, a qualunque punto della riga

@@ -174,68 +174,6 @@ namespace {
         }
     }
 
-    class NativeSerial : public hal::Serial {
-    public:
-        void begin(uint32_t) override {}
-
-        void end() override {}
-
-        int available() override {
-            std::lock_guard<std::mutex> lock(serialMutex);
-            return (int) toFirmware.size();
-        }
-
-        int read() override {
-            std::lock_guard<std::mutex> lock(serialMutex);
-            if (toFirmware.empty()) return -1;
-            const char c = toFirmware.front();
-            toFirmware.pop_front();
-            return (unsigned char) c;
-        }
-
-        size_t write(uint8_t byte) override { return write(&byte, 1); }
-
-        size_t write(const uint8_t *buffer, size_t size) override {
-            {
-                std::lock_guard<std::mutex> lock(serialMutex);
-                toHost.insert(toHost.end(), buffer, buffer + size);
-            }
-            hostCv.notify_all();
-            return size;
-        }
-
-        size_t print(const char *str) override { return write((const uint8_t *) str, strlen(str)); }
-
-        size_t println(const char *str) override { return print(str) + print("\r\n"); }
-
-        size_t print(int value) override { return print(std::to_string(value).c_str()); }
-
-        size_t println(int value) override { return print(value) + print("\r\n"); }
-
-        size_t print(float value, int decimals) override {
-            char buf[32];
-            snprintf(buf, sizeof(buf), "%.*f", decimals, (double) value);
-            return print(buf);
-        }
-
-        size_t println(float value, int decimals) override { return print(value, decimals) + print("\r\n"); }
-
-        size_t print(uint32_t value) override { return print(std::to_string(value).c_str()); }
-
-        size_t println(uint32_t value) override { return print(value) + print("\r\n"); }
-
-        void flush() override {}
-
-        operator bool() override { return true; }
-
-        size_t print(const __FlashStringHelper *str) override { return print(reinterpret_cast<const char *>(str)); }
-
-        size_t println(const __FlashStringHelper *str) override {
-            return println(reinterpret_cast<const char *>(str));
-        }
-    };
-
-    NativeSerial nativeSerial;
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +245,36 @@ char *sim_ltoa(long value, char *out, int) {
 // HAL nativo
 // ---------------------------------------------------------------------------
 namespace hal {
-    Serial *serial = &nativeSerial;
+    namespace serial {
+        void begin(uint32_t) {}
+
+        uint8_t available() {
+            std::lock_guard<std::mutex> lock(serialMutex);
+            return toFirmware.size() > 255 ? 255 : (uint8_t) toFirmware.size();
+        }
+
+        int read() {
+            std::lock_guard<std::mutex> lock(serialMutex);
+            if (toFirmware.empty()) return -1;
+            const char c = toFirmware.front();
+            toFirmware.pop_front();
+            return (unsigned char) c;
+        }
+
+        void write(const uint8_t *buffer, uint8_t size) {
+            {
+                std::lock_guard<std::mutex> lock(serialMutex);
+                toHost.insert(toHost.end(), buffer, buffer + size);
+            }
+            hostCv.notify_all();
+        }
+
+        void write(uint8_t byte) { write(&byte, 1); }
+
+        void writeP(const char *flashText) { write((const uint8_t *) flashText, (uint8_t) strlen(flashText)); }
+
+        void flush() {}
+    }
 
     void halPinMode(uint8_t, HalPinMode) {}
 

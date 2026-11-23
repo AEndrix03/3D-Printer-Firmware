@@ -78,7 +78,7 @@ comandi ottimizzati, risultando in movimenti più fluidi e precisi rispetto ai f
 │
 ├── 🧩 MotionController
 │     ├── moveTo(x,y,z,f)
-│     └── usa StepperDriver, limit check
+│     └── usa Planner + Stepper (step in interrupt), limiti di corsa
 │
 ├── 🌡 TempController
 │     ├── PID base
