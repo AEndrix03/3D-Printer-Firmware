@@ -284,6 +284,8 @@ namespace hal {
     namespace serial {
         void begin(uint32_t) {}
 
+        uint8_t takeLineErrors() { return 0; }
+
         uint8_t available() {
             std::lock_guard<std::mutex> lock(serialMutex);
             return toFirmware.size() > 255 ? 255 : (uint8_t) toFirmware.size();

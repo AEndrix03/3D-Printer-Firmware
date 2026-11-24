@@ -179,7 +179,7 @@ namespace {
 
         const CompactResponse::ResponseCode result = CompactResponse::takeResult();
         if (result == CompactResponse::OK) {
-            CompactResponse::sendOk(number, MotionController::lastCompletedCommand(number));
+            CompactResponse::sendMoveAck(number, MotionController::lastCompletedCommand(number));
         } else {
             CompactResponse::send(result, number);
         }

@@ -9,7 +9,9 @@
 namespace hal {
 
     namespace serial {
-        void begin(uint32_t baud) { ::Serial.begin(baud); }
+        void begin(uint32_t baud) { ::Serial.begin(baud, SERIAL_8N2); }
+
+        uint8_t takeLineErrors() { return 0; }
 
         uint8_t available() {
             const int n = ::Serial.available();

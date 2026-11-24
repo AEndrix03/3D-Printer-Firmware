@@ -39,6 +39,11 @@ namespace hal {
     // Funzioni libere, risolte in compilazione: ogni piattaforma fornisce la propria
     // implementazione (nessuna tabella virtuale, nessuna chiamata indiretta).
     namespace serial {
+        /// Byte che la ricezione puo' trattenere mentre il firmware e' occupato. L'host lo legge
+        /// con M115 e non tiene mai in volo piu' byte di cosi': conta piu' del baud, perche'
+        /// l'adattatore USB consegna i dati a pacchetti e a intervalli di qualche millisecondo.
+        constexpr uint8_t RX_BUFFER_SIZE = 128;
+
         void begin(uint32_t baud);
 
         /// Byte ricevuti e non ancora letti.
@@ -56,6 +61,9 @@ namespace hal {
 
         /// Ritorna quando l'ultimo byte scritto e' uscito dal filo.
         void flush();
+
+        /// Errori di ricezione segnalati dall'UART (trama, byte persi) dall'ultima lettura.
+        uint8_t takeLineErrors();
 
         /**
          * true (una sola volta) se dall'ultima chiamata e' arrivato il carattere di arresto

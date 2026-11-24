@@ -58,7 +58,7 @@ namespace {
 }
 
 namespace {
-    constexpr uint8_t RX_SIZE = 64; // potenza di 2
+    constexpr uint8_t RX_SIZE = hal::serial::RX_BUFFER_SIZE; // potenza di 2
     constexpr uint8_t RX_MASK = RX_SIZE - 1;
 
     volatile uint8_t rxBuffer[RX_SIZE];
@@ -66,10 +66,18 @@ namespace {
     volatile uint8_t rxTail = 0; // scritto solo dal ciclo principale
     bool txUsed = false;
     volatile bool abortFlag = false;
+    volatile uint8_t lineErrors = 0; // errori di trama / byte persi segnalati dall'UART
 }
 
 ISR(USART_RX_vect) {
+    const uint8_t status = UCSR0A; // va letto prima del dato
     const uint8_t byte = UDR0;
+    if (status & (_BV(FE0) | _BV(DOR0))) {
+        if (lineErrors < 255) ++lineErrors;
+        // Trama sbagliata: il byte non e' affidabile (potrebbe anche sembrare un '!').
+        // Scartato: il checksum del comando fa il resto.
+        if (status & _BV(FE0)) return;
+    }
     if (byte == '!') {
         abortFlag = true; // comando in tempo reale: non entra nell'anello
         return;
@@ -172,9 +180,13 @@ namespace hal {
     namespace serial {
         void begin(uint32_t baud) {
             const uint8_t state = irqSave();
-            UCSR0A = _BV(U2X0); // 8 campioni per bit: errore di baud minore a 16 MHz
-            UBRR0 = (uint16_t) ((F_CPU / 4 / baud - 1) / 2);
-            UCSR0C = _BV(UCSZ01) | _BV(UCSZ00); // 8N1
+            // 16 campioni per bit. Il baud va scelto tra quelli che il quarzo genera esatti
+            // (250000 a 16 MHz): 115200 diventerebbe 117647, e con quello scarto l'adattatore
+            // USB perde byte quando arrivano uno dietro l'altro (misure in PROTOCOL.md).
+            UCSR0A = 0;
+            UBRR0 = (uint16_t) ((F_CPU / 8 / baud - 1) / 2);
+            // 8N2: il secondo bit di stop da' a chi riceve una pausa a ogni byte per riallinearsi
+            UCSR0C = _BV(UCSZ01) | _BV(UCSZ00) | _BV(USBS0);
             UCSR0B = _BV(RXEN0) | _BV(TXEN0) | _BV(RXCIE0);
             rxHead = rxTail = 0;
             irqRestore(state);
@@ -205,6 +217,14 @@ namespace hal {
         void writeP(const char *flashText) {
             uint8_t c;
             while ((c = pgm_read_byte(flashText++)) != 0) write(c);
+        }
+
+        uint8_t takeLineErrors() {
+            const uint8_t state = irqSave();
+            const uint8_t value = lineErrors;
+            lineErrors = 0;
+            irqRestore(state);
+            return value;
         }
 
         bool takeAbortRequest() {

@@ -28,6 +28,11 @@ namespace Planner {
     // 16 blocchi (15 utilizzabili) da 48 byte
     constexpr uint8_t BLOCK_BUFFER_SIZE = 16;
 
+    // Quanti blocchi in testa alla coda (compreso quello in esecuzione) hanno il profilo
+    // aggiornato alle velocita' attuali. Gli altri tengono quello calcolato all'arrivo, che
+    // prevede di fermarsi a fine blocco: prudente, e viene rifatto quando tocca a loro.
+    constexpr uint8_t PREPARED_BLOCKS = 4;
+
     /** Step massimi per asse in un blocco: l'interrupt lavora a 16 bit. */
     constexpr int32_t MAX_BLOCK_STEPS = 32767;
 
@@ -51,8 +56,8 @@ namespace Planner {
         uint32_t accelK;          // accelerazione in (step/s per tick di timer) * 65536
         uint32_t commandNumber;   // N del comando che ha generato il blocco
         uint16_t nominalRate;     // step/s
-        uint16_t initialRate;
         uint16_t finalRate;
+        uint16_t standstillRate;  // velocita' di partenza/arrivo "da fermo", step/s
         uint8_t directionBits;    // bit a = 1 se l'asse a va in negativo
         volatile uint8_t flags;
 
@@ -60,9 +65,9 @@ namespace Planner {
         uint32_t entrySqr;        // velocita' di ingresso attuale
         uint32_t maxEntrySqr;     // quella chiesta dall'host
         uint32_t deltaSqr;        // quanto puo' cambiare lungo il blocco (2*a*d), saturato
-        uint32_t accel2;          // 2 * accelerazione di pianificazione, in step/s^2
+        uint32_t gainInverse;     // 2^32 / (velocita'^2 guadagnata per step): divisioni fatte come prodotti
+        uint16_t nominalSpeed;    // 1/64 mm/s
         uint16_t stepScale;
-        uint16_t standstillRate;  // velocita' di partenza/arrivo "da fermo", step/s
     };
 
     void init();
@@ -80,6 +85,12 @@ namespace Planner {
      * @return false se il movimento e' nullo (nessuno step)
      */
     bool addBlock(const int32_t *delta, const Plan &plan, uint32_t commandNumber, uint8_t flags = 0);
+
+    /**
+     * @brief Aggiorna i profili dei blocchi che stanno per partire. Da chiamare a ogni giro
+     * del ciclo principale e dentro le attese: costa qualcosa solo se c'e' da ricalcolare.
+     */
+    void prepare();
 
     /** Posizione (step) alla fine dell'ultimo blocco accodato. */
     int32_t position(uint8_t axis);

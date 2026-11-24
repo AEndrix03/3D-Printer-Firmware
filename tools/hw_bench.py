@@ -12,7 +12,7 @@ import sys, time, re
 import serial
 
 PORT = sys.argv[1] if len(sys.argv) > 1 else 'COM3'
-ser = serial.Serial(PORT, 115200, timeout=0.05)
+ser = serial.Serial(PORT, 250000, timeout=0.05, stopbits=serial.STOPBITS_TWO)
 n = 0
 stats = {'retx': 0, 'e01': 0, 'timeouts': 0, 'rx_corrupt': 0}
 TERMINAL = re.compile(r'^(OK0|E0\d|EM0|ET0|ES\d) N(\d+)(?: D(\d+))?')
@@ -26,7 +26,7 @@ def readline(timeout):
         if not c:
             continue
         if c == b'\n':
-            return buf.decode('latin1').strip()
+            return buf.decode('latin1').strip('\r\n \t')  # non strip(): toglierebbe anche byte delle conferme
         buf += c
     return None
 
@@ -170,9 +170,24 @@ def plan_moves(moves):
             for seg in segs]
 
 
-WINDOW_FRAMES = 4
+def move_ack(line, pending):
+    """Conferma corta di un movimento: 4 byte con il bit 7 a 1. Ritorna il numero del comando
+    confermato, 'corrupt' se il controllo non torna, None se la riga non e' una conferma."""
+    data = line.encode('latin1')
+    if len(data) != 4 or any((b & 0xC0) != 0x80 for b in data):
+        return None
+    crc = crc_update(crc_update(0xFFFF, data[0]), data[1]) & 0x0FFF
+    if crc != (((data[2] & 0x3F) << 6) | (data[3] & 0x3F)):
+        return 'corrupt'
+    for number, _ in pending:
+        if (number & 0x3F) == (data[0] & 0x3F):
+            return number
+    return None
+
+
+WINDOW_FRAMES = 8
 recent = []
-WINDOW_BYTES = 56
+WINDOW_BYTES = 120  # buffer di ricezione del firmware (128) meno un margine
 
 
 def stream(moves, timeout=8.0):
@@ -201,6 +216,15 @@ def stream(moves, timeout=8.0):
             stats['timeouts'] += 1
             raise RuntimeError('no answer to move N%d; pending %s; last lines %r'
                                % (pending[0][0], [num for num, _ in pending], recent))
+        ack = move_ack(line, pending)
+        if ack == 'corrupt':
+            stats['rx_corrupt'] += 1
+            print('    conferma rovinata: %r' % line)
+            continue
+        if ack is not None:
+            while pending and pending[0][0] <= ack:
+                pending.pop(0)
+            continue
         m = TERMINAL.match(line)
         if not m:
             continue
@@ -239,7 +263,7 @@ def wait_idle(limit=120.0):
 # Soglie di accettazione: una modifica al firmware che le supera non va tenuta.
 MIN_FREE_RAM = 600      # byte liberi al picco di stack
 MAX_ISR_US = 75         # durata massima dell'interrupt degli step
-worst = {'ram': 99999, 'isr': 0, 'overruns': 0, 'cs': 0, 'overflow': 0, 'ack': 0}
+worst = {'ram': 99999, 'isr': 0, 'overruns': 0, 'cs': 0, 'overflow': 0, 'ack': 0, 'line': 0}
 
 
 def diag(label):
@@ -247,6 +271,9 @@ def diag(label):
     dia = next((l for l in info if l.startswith('DIA')), '')
     prf = next((l for l in info if l.startswith('PRF')), '')
     print('%-34s %s | %s' % (label, dia, prf))
+    for extra in info:
+        if not extra.startswith(('DIA', 'PRF')):
+            print('%-34s %s' % ('', extra))
     d = dia.split('*')[0].split()
     p = prf.split('*')[0].split()
     if len(d) >= 8 and len(p) >= 4:
@@ -256,6 +283,7 @@ def diag(label):
         worst['ram'] = min(worst['ram'], int(p[1]))
         worst['isr'] = max(worst['isr'], int(p[2]))
         worst['overruns'] += int(p[3])
+        worst['line'] += int(p[4]) if len(p) > 4 and p[4].isdigit() else 0
     return dia, prf
 
 
@@ -307,6 +335,22 @@ for seg_mm, feed, count in ((0.5, 3000, 600), (0.2, 3000, 600), (0.2, 4800, 800)
     stream([((-int(round(count * seg_mm * 80)), 0, 0, 0), 6000)])
     wait_idle()
 
+# --- 3b. capacita' del collegamento: segmenti minuscoli in rettilineo, chiesti piu' in fretta di
+# quanto possano arrivare. Qui non sono gli spigoli a rallentare la macchina: il numero di
+# segmenti al secondo e' quello che firmware e seriale riescono a smaltire.
+for seg_steps, count in ((4, 1500), (8, 1500)):
+    before = dict(stats)
+    t = time.time()
+    stream([((seg_steps, 0, 0, 0), 5000) for _ in range(count)])
+    stream_time = time.time() - t
+    wait_idle()
+    print('rettilineo, segmenti da %.2f mm a F5000: %d in %.2f s = %.0f seg/s (%.0f mm/s su 83 richiesti) '
+          'ritrasmissioni %d' % (seg_steps / 80.0, count, stream_time, count / stream_time,
+                                 count / stream_time * seg_steps / 80.0, stats['retx'] - before['retx']))
+    diag('dopo rettilineo %.2f mm' % (seg_steps / 80.0))
+    stream([((-seg_steps * count, 0, 0, 0), 6000)])
+    wait_idle()
+
 # --- 4. arresto in tempo reale durante un movimento ---
 stream([((8000, 0, 0, 0), 3000)])
 time.sleep(0.4)
@@ -327,7 +371,7 @@ if worst['isr'] > MAX_ISR_US:
     problems.append('interrupt degli step %d us > %d' % (worst['isr'], MAX_ISR_US))
 if worst['overruns']:
     problems.append('%d scadenze degli step mancate' % worst['overruns'])
-if worst['cs'] or worst['overflow'] or worst['ack'] or stats['retx'] or stats['e01'] or stats['rx_corrupt'] > 1:
+if worst['line'] or worst['cs'] or worst['overflow'] or worst['ack'] or stats['retx'] or stats['e01'] or stats['rx_corrupt'] > 1:
     problems.append('errori sul collegamento: %s %s' % (worst, stats))
 
 print()

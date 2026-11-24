@@ -75,6 +75,7 @@ namespace {
      */
     bool waitTask() {
         hal::watchdog::reset();
+        Planner::prepare();
         BusyHandler::update();
         SafetyManager::update();
         MotionController::pollAbort();
@@ -258,6 +259,7 @@ namespace MotionController {
 
     void update() {
         resyncAfterStop();
+        Planner::prepare();
     }
 
     void setEnabled(bool enabled) {
@@ -458,6 +460,7 @@ namespace MotionController {
                 CompactResponse::addInt((int32_t) (MotionConfig::JUNCTION_DEVIATION * 1000.0f)); // micron
                 CompactResponse::addInt(MotionConfig::MAX_STEP_RATE);
                 CompactResponse::addInt(Planner::BLOCK_BUFFER_SIZE - 1);
+                CompactResponse::addInt(hal::serial::RX_BUFFER_SIZE);
                 CompactResponse::end();
                 // Corsa massima in step e assi su cui vale: l'host rifiuta da se' un movimento
                 // fuori volume prima di spezzarlo in piu' blocchi (qui il controllo resta comunque)

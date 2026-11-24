@@ -29,6 +29,13 @@
  *   controllo     12 bit bassi del CRC-16/CCITT di tutti i byte precedenti, 2 sestetti
  *
  * Un segmento corto X Y E a velocita' invariata occupa 15 byte.
+ *
+ * Risposta a un frame accettato (firmware -> host), 5 byte invece di una riga di testo:
+ *   10ssssss  numero del comando modulo 64
+ *   10llllll  quanti comandi mancano al completamento (N - D); 63 = 63 o piu'
+ *   10cccccc 10cccccc  12 bit bassi del CRC-16/CCITT dei due byte precedenti
+ *   '\n'
+ * Ogni altro esito (errore, rifiuto, duplicato) resta una riga di testo.
  */
 namespace MoveFrame {
     constexpr uint8_t HEADER_MARK = 0xC0;
@@ -36,6 +43,7 @@ namespace MoveFrame {
     constexpr uint8_t HEADER_WIDE = 0x10;
     constexpr uint8_t HEADER_AXES = 0x0F;
     constexpr uint8_t SEQUENCE_MASK = 0x3F;
+    constexpr uint8_t ACK_LAG_UNKNOWN = 63;
     constexpr uint8_t MAX_LENGTH = 27; // intestazione + sequenza + 4 assi larghi + piano + scala + ingresso + controllo
 
     inline bool isHeader(uint8_t byte) { return byte >= 0xC0; }

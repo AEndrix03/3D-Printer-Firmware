@@ -33,7 +33,7 @@
     }
 
     namespace SystemConfig {
-        constexpr uint32_t SERIAL_BAUD = 115200;
+        constexpr uint32_t SERIAL_BAUD = 250000; // 8N2; esatto con un quarzo da 16 MHz
         constexpr uint16_t WATCHDOG_TIMEOUT_MS = 2000;
         constexpr uint16_t MAX_HEAP_BYTES = 2048;
     }
@@ -65,7 +65,7 @@
     }
 
     namespace SystemConfig {
-        constexpr uint32_t SERIAL_BAUD = 115200;
+        constexpr uint32_t SERIAL_BAUD = 250000; // 8N2; esatto con un quarzo da 16 MHz
         constexpr uint16_t WATCHDOG_TIMEOUT_MS = 5000;
         constexpr uint32_t MAX_HEAP_BYTES = 327680; // 320KB
         constexpr uint8_t WIFI_ENABLED = 1;

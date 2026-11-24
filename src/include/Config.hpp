@@ -6,6 +6,10 @@
  * @brief Costanti di configurazione globale per macchina.
  */
 
+// ---- Seriale ---------------------------------------------------------------
+// 250000 baud, 8 bit, 2 bit di stop. Con un quarzo da 16 MHz e' esatto; 115200 non lo e'.
+constexpr uint32_t SERIAL_BAUD = 250000;
+
 // ---- Termico ---------------------------------------------------------------
 // false = nessun termistore collegato: il riscaldamento viene RIFIUTATO
 // (senza sensore non esiste regolazione ne' protezione).

@@ -30,6 +30,15 @@ namespace {
 
     inline uint8_t prevIndex(uint8_t i) { return (uint8_t) ((i - 1) & MASK); }
 
+    // Valori che dipendono solo da accelerazione e scala: uguali per tutti i segmenti di una
+    // stessa retta, quindi si ricalcolano (due divisioni e una radice) solo quando cambiano.
+    uint16_t cachedAcceleration = 0;
+    uint16_t cachedScale = 0;
+    uint32_t cachedGain = 1;
+    uint32_t cachedInverse = SATURATED;
+    uint32_t cachedAccelK = 1;
+    uint16_t cachedStandstill = MotionConfig::MIN_STEP_RATE;
+
     /** Radice quadrata intera (per difetto). */
     uint16_t isqrt(uint32_t value) {
         uint32_t root = 0;
@@ -47,45 +56,51 @@ namespace {
         return (uint16_t) root;
     }
 
-    /** Velocita' (al quadrato, unita' comuni) -> step/s del blocco, entro i suoi limiti. */
-    uint16_t rateFor(const Block &b, uint32_t speedSqr) {
-        uint32_t rate = ((uint32_t) isqrt(speedSqr) * b.stepScale) >> 10;
-        if (rate < b.standstillRate) rate = b.standstillRate;
-        if (rate > b.nominalRate) rate = b.nominalRate;
-        return (uint16_t) rate;
+    /**
+     * Step necessari per cambiare la velocita'^2 di `speedSqr`: speedSqr / guadagno per step,
+     * calcolato come prodotto per l'inverso (su AVR una divisione a 32 bit costa ~40 us).
+     * Il risultato e' quello esatto o uno in piu': mai meno strada del necessario.
+     */
+    inline uint32_t stepsFor(const Block &b, uint32_t speedSqr) {
+        return (uint32_t) (((uint64_t) speedSqr * b.gainInverse) >> 32) + 1;
     }
 
     /**
-     * Traduce velocita' di ingresso/uscita nel profilo trapezoidale usato dallo Stepper.
+     * Traduce velocita' di ingresso/uscita (al quadrato, unita' comuni) nel profilo usato
+     * dallo Stepper: da quale step frenare e fino a che velocita'. Tutto in step, senza
+     * passare dalle velocita' in step/s, tranne quella di arrivo.
      * Non tocca i blocchi gia' in esecuzione.
      */
     void calculateTrapezoid(Block &b, uint32_t entrySqr, uint32_t exitSqr) {
-        const uint16_t initialRate = rateFor(b, entrySqr);
-        const uint16_t finalRate = rateFor(b, exitSqr);
-
-        const uint32_t nominalSq = (uint32_t) b.nominalRate * b.nominalRate;
-        const uint32_t initialSq = (uint32_t) initialRate * initialRate;
-        const uint32_t finalSq = (uint32_t) finalRate * finalRate;
+        const uint32_t nominalSqr = (uint32_t) b.nominalSpeed * b.nominalSpeed;
+        if (entrySqr > nominalSqr) entrySqr = nominalSqr;
+        if (exitSqr > nominalSqr) exitSqr = nominalSqr;
         const uint32_t count = b.stepEventCount;
 
-        uint32_t accelSteps = (nominalSq - initialSq + b.accel2 - 1) / b.accel2; // per eccesso
-        const uint32_t decelSteps = (nominalSq - finalSq) / b.accel2;            // per difetto
+        const uint32_t accelSteps = stepsFor(b, nominalSqr - entrySqr);
+        const uint32_t decelSteps = stepsFor(b, nominalSqr - exitSqr);
         uint32_t decelerateAfter;
         if (accelSteps + decelSteps > count) {
-            // Il blocco e' troppo corto per raggiungere la velocita' nominale:
-            // si accelera fino al punto di intersezione e poi si decelera.
-            const uint32_t gain = b.accel2 * count + finalSq;
-            accelSteps = gain > initialSq ? (gain - initialSq + 2 * b.accel2 - 1) / (2 * b.accel2) : 0;
-            if (accelSteps > count) accelSteps = count;
-            decelerateAfter = accelSteps;
+            // Il blocco e' troppo corto per raggiungere la velocita' nominale: si accelera fino
+            // al punto da cui la frenata porta giusta alla velocita' di uscita.
+            if (exitSqr >= entrySqr) {
+                decelerateAfter = (count + stepsFor(b, exitSqr - entrySqr)) >> 1;
+                if (decelerateAfter > count) decelerateAfter = count;
+            } else {
+                const uint32_t braking = stepsFor(b, entrySqr - exitSqr);
+                decelerateAfter = count > braking ? (count - braking) >> 1 : 0;
+            }
         } else {
             decelerateAfter = count - decelSteps;
         }
 
+        uint32_t finalRate = ((uint32_t) isqrt(exitSqr) * b.stepScale) >> 10;
+        if (finalRate < b.standstillRate) finalRate = b.standstillRate;
+        if (finalRate > b.nominalRate) finalRate = b.nominalRate;
+
         const uint8_t irq = hal::irqSave();
         if (!(b.flags & FLAG_BUSY)) {
-            b.initialRate = initialRate;
-            b.finalRate = finalRate;
+            b.finalRate = (uint16_t) finalRate;
             b.decelerateAfter = (uint16_t) decelerateAfter;
         }
         hal::irqRestore(irq);
@@ -94,6 +109,9 @@ namespace {
     /**
      * Dopo l'aggiunta di un blocco: quelli prima di lui possono entrare piu' veloci, perche'
      * ora c'e' piu' strada per frenare. Si risale la coda finche' qualcosa cambia.
+     *
+     * Qui si aggiornano solo le velocita' di ingresso (somme e confronti). I profili, che
+     * costano radici e divisioni, li rifa' prepare() e solo per i blocchi che stanno per partire.
      */
     void recalculate() {
         const uint8_t first = tail; // puo' avanzare durante il calcolo: i blocchi BUSY sono protetti
@@ -114,17 +132,6 @@ namespace {
             if (entry == b.entrySqr) break; // i blocchi precedenti dipendono solo da questo valore
             b.entrySqr = entry;
             nextEntry = entry;
-        }
-
-        i = first;
-        while (i != head) {
-            Block &current = buffer[i];
-            const uint8_t next = nextIndex(i);
-            if (current.flags & FLAG_RECALCULATE) {
-                current.flags &= (uint8_t) ~FLAG_RECALCULATE;
-                calculateTrapezoid(current, current.entrySqr, next == head ? 0 : buffer[next].entrySqr);
-            }
-            i = next;
         }
     }
 }
@@ -198,23 +205,31 @@ namespace Planner {
         // --- accelerazione: quella vera per lo Stepper, il 90% per le distanze ---
         uint16_t acceleration = plan.acceleration ? plan.acceleration : 1;
         if (acceleration > MAX_ACCELERATION) acceleration = MAX_ACCELERATION;
-        uint32_t accelSteps = ((uint32_t) acceleration * b.stepScale) >> 4; // step/s^2
-        if (accelSteps > MAX_ACCEL_STEPS) accelSteps = MAX_ACCEL_STEPS;
-        if (accelSteps < 16) accelSteps = 16;
-        b.accelK = (accelSteps * ACCEL_K_MUL) >> 14;
-        if (b.accelK == 0) b.accelK = 1;
-        b.accel2 = (accelSteps * 461UL) >> 8; // 2 * 0.9
-        // Da fermo il primo step arriva dopo sqrt(2/a): partire piu' lenti di cosi'
-        // significherebbe solo aspettare, non accelerare piu' dolcemente.
-        b.standstillRate = isqrt(b.accel2);
-        if (b.standstillRate < MotionConfig::MIN_STEP_RATE) b.standstillRate = MotionConfig::MIN_STEP_RATE;
+        if (acceleration != cachedAcceleration || b.stepScale != cachedScale) {
+            cachedAcceleration = acceleration;
+            cachedScale = b.stepScale;
+            uint32_t accelSteps = ((uint32_t) acceleration * b.stepScale) >> 4; // step/s^2
+            if (accelSteps > MAX_ACCEL_STEPS) accelSteps = MAX_ACCEL_STEPS;
+            if (accelSteps < 16) accelSteps = 16;
+            cachedAccelK = (accelSteps * ACCEL_K_MUL) >> 14;
+            if (cachedAccelK == 0) cachedAccelK = 1;
+            // Da fermo il primo step arriva dopo sqrt(2/a): partire piu' lenti di cosi'
+            // significherebbe solo aspettare, non accelerare piu' dolcemente.
+            cachedStandstill = isqrt((accelSteps * 461UL) >> 8); // sqrt(2 * 0.9 * a)
+            if (cachedStandstill < MotionConfig::MIN_STEP_RATE) cachedStandstill = MotionConfig::MIN_STEP_RATE;
+            cachedGain = (uint32_t) acceleration * GAIN_PER_STEP / b.stepScale;
+            if (cachedGain == 0) cachedGain = 1;
+            cachedInverse = SATURATED / cachedGain;
+        }
+        b.accelK = cachedAccelK;
+        b.standstillRate = cachedStandstill;
+        b.gainInverse = cachedInverse;
+        b.nominalSpeed = plan.nominalSpeed ? plan.nominalSpeed : 1;
 
         // --- quanto puo' cambiare la velocita' lungo il blocco ---
-        const uint32_t nominalSqr = (uint32_t) plan.nominalSpeed * plan.nominalSpeed;
-        uint32_t gain = (uint32_t) acceleration * GAIN_PER_STEP / b.stepScale;
-        if (gain == 0) gain = 1;
+        const uint32_t nominalSqr = (uint32_t) b.nominalSpeed * b.nominalSpeed;
         // oltre la velocita' nominale non serve saperlo (e il prodotto non starebbe in 32 bit)
-        b.deltaSqr = count >= nominalSqr / gain ? SATURATED : gain * count;
+        b.deltaSqr = count >= stepsFor(b, nominalSqr) ? SATURATED : cachedGain * count;
 
         // --- ingresso: quello chiesto dall'host, per ora con arresto a fine blocco ---
         uint32_t entrySqr = (uint32_t) plan.entrySpeed * plan.entrySpeed;
@@ -229,6 +244,20 @@ namespace Planner {
 
         head = nextIndex(head); // da qui lo Stepper puo' vederlo
         recalculate();
+        prepare();
         return true;
+    }
+
+    void prepare() {
+        uint8_t i = tail;
+        for (uint8_t n = 0; n < PREPARED_BLOCKS && i != head; ++n) {
+            Block &b = buffer[i];
+            const uint8_t next = nextIndex(i);
+            if ((b.flags & (FLAG_RECALCULATE | FLAG_BUSY)) == FLAG_RECALCULATE) {
+                b.flags &= (uint8_t) ~FLAG_RECALCULATE;
+                calculateTrapezoid(b, b.entrySqr, next == head ? 0 : buffer[next].entrySqr);
+            }
+            i = next;
+        }
     }
 }

@@ -172,8 +172,7 @@ namespace Stepper {
             if (!running) {
                 // Partenza da fermo: sempre dalla velocita' "da fermo" del blocco, anche se il piano
                 // ricevuto dichiara un ingresso piu' veloce (la macchina e' ferma: e' un fatto)
-                rateFixed = (uint32_t) (current->initialRate < current->standstillRate
-                                        ? current->initialRate : current->standstillRate) << 16;
+                rateFixed = (uint32_t) current->standstillRate << 16;
                 running = true;
             } else if ((uint16_t) (rateFixed >> 16) > current->nominalRate) {
                 rateFixed = (uint32_t) current->nominalRate << 16;
@@ -238,8 +237,15 @@ namespace Stepper {
                 return;
             }
         } else if (completed > b->decelerateAfter) {
-            const uint32_t floorRate = (uint32_t) b->finalRate << 16;
-            rateFixed = (rateFixed > delta + floorRate) ? rateFixed - delta : floorRate;
+            // Verso la velocita' di uscita, da sopra o da sotto, sempre in rampa: se si e' entrati
+            // piu' lenti del previsto la si raggiunge accelerando, non con un salto.
+            const uint32_t target = (uint32_t) b->finalRate << 16;
+            if (rateFixed > target) {
+                rateFixed = (rateFixed > delta + target) ? rateFixed - delta : target;
+            } else {
+                rateFixed += delta;
+                if (rateFixed > target) rateFixed = target;
+            }
         } else if (rate < b->nominalRate) {
             rateFixed += delta;
             if ((uint16_t) (rateFixed >> 16) >= b->nominalRate) rateFixed = (uint32_t) b->nominalRate << 16;

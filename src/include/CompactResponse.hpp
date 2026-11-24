@@ -43,6 +43,13 @@ namespace CompactResponse {
      */
     void sendOk(uint32_t cmdNumber, uint32_t completed);
 
+    /**
+     * @brief Conferma corta di un movimento binario accettato: 4 byte con il bit 7 a 1
+     * (numero modulo 64, comandi ancora da completare, controllo a 12 bit) e fine riga.
+     * Vedi MoveFrame.hpp. Gli esiti diversi da OK restano righe di testo.
+     */
+    void sendMoveAck(uint32_t cmdNumber, uint32_t completed);
+
     /** Imposta l'esito terminale del comando in esecuzione (default OK). */
     void setResult(ResponseCode code);
 

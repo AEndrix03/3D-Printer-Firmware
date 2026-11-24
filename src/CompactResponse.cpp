@@ -3,6 +3,7 @@
 //
 
 #include "./include/CompactResponse.hpp"
+#include "./include/MoveFrame.hpp"
 #include "./include/hal/McuHAL.hpp"
 
 namespace {
@@ -104,6 +105,20 @@ namespace CompactResponse {
         ultoa(completed, num, 10);
         putStr(num);
         transmit(checksum());
+    }
+
+    void sendMoveAck(uint32_t cmdNumber, uint32_t completed) {
+        uint32_t lag = cmdNumber - completed;
+        if (lag > MoveFrame::ACK_LAG_UNKNOWN) lag = MoveFrame::ACK_LAG_UNKNOWN;
+        uint8_t bytes[5];
+        bytes[0] = (uint8_t) (0x80 | (cmdNumber & MoveFrame::SEQUENCE_MASK));
+        bytes[1] = (uint8_t) (0x80 | lag);
+        uint16_t crc = MoveFrame::crcUpdate(0xFFFF, bytes[0]);
+        crc = MoveFrame::crcUpdate(crc, bytes[1]);
+        bytes[2] = (uint8_t) (0x80 | ((crc >> 6) & 0x3F));
+        bytes[3] = (uint8_t) (0x80 | (crc & 0x3F));
+        bytes[4] = '\n';
+        hal::serial::write(bytes, sizeof(bytes));
     }
 
     void setResult(ResponseCode code) {

@@ -40,7 +40,7 @@ comandi ottimizzati, risultando in movimenti più fluidi e precisi rispetto ai f
         │
         ▼
 ═════════════════════════════════════════════
-🔌 SERIAL (TTL/USB 115200 Baud)
+🔌 SERIAL (TTL/USB 250000 Baud, 8N2)
 ═════════════════════════════════════════════
 │
 ▼
@@ -181,7 +181,7 @@ nella [wiki del progetto](https://github.com/yourusername/3D-Printer-Firmware/wi
 
 Il firmware utilizza un protocollo seriale personalizzato con le seguenti caratteristiche:
 
-- Comunicazione a 115200 baud
+- Comunicazione a 250000 baud, 8N2 (esatti con il quarzo da 16 MHz: vedi PROTOCOL.md)
 - Numerazione dei comandi (N#)
 - Checksum (*CS) per verificare l'integrità
 - Sistema di acknowledgment (Ack/Nack)

@@ -1,6 +1,7 @@
 # Protocollo seriale Firmware <-> Driver
 
-115200 baud, 8N1, nessun flow control. Righe ASCII terminate da `\n`.
+250000 baud, 8 bit, 2 bit di stop (8N2), nessun flow control: vedi "Velocita' della linea".
+Righe ASCII terminate da `\n`.
 Protocollo **stop-and-wait**: l'host invia un comando e attende la sua risposta
 terminale prima di inviare il successivo.
 
@@ -102,7 +103,7 @@ Vedi `contracts/*.json`. In sintesi:
 | `S2` / `S3` | pausa / ripresa |
 | `S6` / `S7` | azzera / leggi errore |
 | `S10` | stato -> `STA <Idle|Homing|Printing|Paused|Error>` |
-| `S11` | diagnostica -> `DIA <uptime s> <reset> <ultimo N> <err cs> <err overflow> <ACK persi> <RAM libera>` e `PRF <RAM minima mai rimasta libera> <durata max interrupt step, us> <scadenze step mancate>` |
+| `S11` | diagnostica -> `DIA <uptime s> <reset> <ultimo N> <err cs> <err overflow> <ACK persi> <RAM libera>` e `PRF <RAM minima mai rimasta libera> <durata max interrupt step, us> <scadenze step mancate> <errori di ricezione dell'UART>` |
 
 I movimenti sono segmenti rettilinei; archi (G2/G3) e spline (G5) vengono spezzati
 dal driver con errore di corda di 0,02 mm e raccordati dal suo pianificatore.
@@ -173,27 +174,57 @@ caratteri mancanti: decine per prova, contro zero con la scrittura diretta e zer
 ritardo puro della stessa durata. Il meccanismo non e' stato chiarito; `tools/hw_bench.py`
 verifica il checksum di ogni riga e fallisce se ne arriva rovinata piu' di una.
 
-Punto aperto: con il firmware attuale una esecuzione del banco prova su sette ha comunque
-ricevuto 15 righe rovinate (e tre risposte mai arrivate); le altre sei nessuna. Il protocollo
-le assorbe (checksum, ritrasmissione), ma la causa resta da trovare.
+La causa e' stata poi trovata, e non era `digitalWrite()`: era la velocita' della linea (vedi
+sotto). `digitalWrite()` cambiava solo le pause tra un byte e l'altro, e con esse la
+probabilita' che il difetto si vedesse. La regola resta, perche' la scrittura diretta e' anche
+piu' veloce.
+
+### Velocita' della linea: 250000 baud, due bit di stop
+
+Con un quarzo da 16 MHz l'ATmega non puo' generare 115200 baud: il valore piu' vicino e' 117647
+(+2,1%). `tools/baudmargin` misura quanto scarto regge il collegamento: la scheda resta al suo
+baud, il PC cambia il proprio, e si contano i byte rovinati nei due versi. Sul clone con CH340:
+
+| Configurazione | Scheda -> PC, byte di fila | PC -> scheda |
+|----------------|----------------------------|--------------|
+| 115200 chiesti (117647 reali), 1 bit di stop | regge da -2,8% a +5%; **si lavorava a -2,08%** | da -4% a +3% |
+| 250000 (esatti), 1 bit di stop | da meno di -2% a +6%: limite a meno di 2 punti | da -5% a +2% |
+| 250000 (esatti), 2 bit di stop nei due versi | da -5% a +6% | da -5% a +6% |
+
+(scarto = baud del PC rispetto a quello della scheda; con una pausa tra i byte il primo caso
+regge fino a -4%).
+
+Quando la scheda trasmette piu' in fretta di quanto il PC si aspetta e i byte arrivano uno
+dietro l'altro, l'adattatore resta indietro di una frazione di bit a ogni byte finche' ne perde
+uno. A 115200 il margine era di 0,7 punti, e il risonatore della scheda si sposta di decimi di
+punto con la temperatura (misurato: -0,3% e -0,6% in due momenti): da qui le righe rovinate
+"a giornate". Il secondo bit di stop e' la pausa che permette a chi riceve di riallinearsi a
+ogni byte, e a 250000 baud lo scarto di partenza e' zero. Costa un bit in piu' ogni dieci, su
+una linea che e' comunque piu' del doppio piu' veloce di prima.
+
+Il firmware conta gli errori di ricezione segnalati dall'UART (trama, byte persi): quarto
+valore di `PRF`. `tools/hw_bench.py` fallisce se non e' zero.
+
+Su Linux 250000 non e' tra i baud "con un nome": il driver lo imposta con `termios2`
+(`src/core/serial/LinuxBaud.cpp`). L'aggiornamento del firmware dal bootloader resta a 115200.
 
 ### Misure sulla scheda reale
 
 `tools/hw_bench.py <porta>` esegue sulla scheda movimenti veloci, a quattro assi e flussi di
 segmenti corti, e stampa `DIA`/`PRF` dopo ogni fase. Valori misurati su un ATmega328P a
-16 MHz (clone con CH340, 115200 baud), scheda nuda:
+16 MHz (clone con CH340, 250000 baud 8N2), scheda nuda:
 
 | Grandezza | Valore |
 |-----------|--------|
-| RAM minima rimasta libera (picco di stack) | 731 byte con la coda da 16 blocchi (848 con 8, 606 all'inizio) |
-| Durata massima dell'interrupt degli step | 57 us (67 con i contatori a 32 bit, 124 prima della tabella degli intervalli) |
+| RAM minima rimasta libera (picco di stack) | 620 byte con coda da 16 blocchi e ricezione da 128 byte (848 con 8 e 64, 606 all'inizio) |
+| Durata massima dell'interrupt degli step | 60 us (124 prima della tabella degli intervalli) |
 | Scadenze degli step mancate | 0 |
 | Errori di checksum / ritrasmissioni su ~2000 comandi | 0 |
 | Giro completo di un comando senza lavoro (`S10`) | 7,9 ms |
 | Movimenti di testo, uno alla volta (formato non piu' in uso) | ~79 segmenti/s |
 | Movimenti binari pianificati dal firmware (prima) | 173-218 segmenti/s |
-| Movimenti binari pianificati dall'host (ora), segmenti da 0,1 mm | 270 segmenti/s |
-| Memoria di programma | 24.736 byte su 32.256 (27.554 con il pianificatore in virgola mobile) |
+| Movimenti binari pianificati dall'host, segmenti da 0,05 mm in rettilineo | 678 segmenti/s (limite: la regola di arresto, non il collegamento) |
+| Memoria di programma | 25.388 byte su 32.256 (27.554 con il pianificatore in virgola mobile) |
 | Arresto con `!` da 50 mm/s | 0,07 s |
 
 Il collo di bottiglia per le curve fitte e' il giro del comando (stop-and-wait su USB), non
@@ -230,7 +261,7 @@ a fermo, con i limiti di `MotionConfig.hpp`.
 | Riga | Contenuto |
 |------|-----------|
 | `SPM <x> <y> <z> <e>` | step per mm |
-| `LIM <fx> <fy> <fz> <fe> <axy> <az> <ae> <jd> <rate> <coda>` | velocita' massime (mm/min), accelerazioni (mm/s^2), deviazione di giunzione (micron), step/s massimi, blocchi utilizzabili della coda |
+| `LIM <fx> <fy> <fz> <fe> <axy> <az> <ae> <jd> <rate> <coda> <rx>` | velocita' massime (mm/min), accelerazioni (mm/s^2), deviazione di giunzione (micron), step/s massimi, blocchi utilizzabili della coda, byte del buffer di ricezione |
 | `TRV <x> <y> <z> <assi>` | corsa massima in step e maschera degli assi riferiti (bit0 X, bit1 Y, bit2 Z): l'host rifiuta da se' un movimento fuori volume, prima di spezzarlo in piu' blocchi |
 | `CRT STP <x> <y> <z>` | posizione in step alla fine dei movimenti in coda |
 
@@ -274,13 +305,41 @@ Regole:
   comandi in attesa nel buffer.
 - Il driver tiene una copia della posizione in step e la rilegge con `M115` ogni volta che puo'
   essere cambiata senza che lui lo sappia (arresto, allarme, homing, `M12`, rifiuto, riavvio).
+- In frenata lo Stepper va verso la velocita' di uscita del blocco sempre in rampa, anche da
+  sotto: se si e' entrati piu' lenti del previsto la raggiunge accelerando, mai con un salto.
 - Il firmware elabora **un comando per giro** del ciclo principale: tra un comando e il
   successivo watchdog, sicurezza e temperatura vengono sempre aggiornati, anche con il buffer
   di ricezione sempre pieno.
 
-Misurato sulla scheda reale (`tools/hw_bench.py`): 270 segmenti al secondo con segmenti da
-0,1 mm (173-218 quando pianificava il firmware, ~79 con i comandi di testo). Il limite e' ora
-la riga di risposta, che il firmware trasmette restando in attesa (~1,8 ms su ~3,7 per segmento).
+**Conferma corta.** A un frame accettato il firmware non risponde con una riga di testo ma con
+5 byte: numero del comando modulo 64, comandi ancora da completare (`N - D`; 63 = 63 o piu'),
+12 bit di CRC, fine riga. I primi quattro hanno il bit 7 a 1, quindi non si confondono con il
+testo. Errori, rifiuti e duplicati restano righe di testo.
+
+**Quanti frame in volo.** Fino a 8, e mai piu' byte di quanti ne tiene il buffer di ricezione
+del firmware (128, comunicato con `LIM`) meno un margine. Conta piu' del baud: l'adattatore USB
+consegna i dati al PC subito solo quando ne ha accumulati 32 byte, altrimenti dopo alcuni
+millisecondi. Con 3 frame in volo e conferme corte si restava a ~430 al secondo qualunque cosa
+facesse la scheda (misurato con `tools/linktest`).
+
+**Dove va il tempo, per segmento** (misurato sulla scheda con contatori temporanei):
+
+| Voce | Prima | Ora |
+|------|-------|-----|
+| lettura e controllo del frame | 0,11 ms | 0,11 ms |
+| controllo di arresto e profilo | 1,58 ms | 0,75 ms |
+| risposta | 1,08 ms | 0,16 ms |
+
+Il profilo di un blocco costava ~250 us, quasi tutti in radici quadrate e divisioni a 32 bit:
+ora si calcola in step, con una sola radice e prodotti per l'inverso al posto delle divisioni.
+Inoltre i profili aggiornati si tengono solo per i 4 blocchi in testa alla coda; gli altri
+conservano quello calcolato all'arrivo (fermarsi a fine blocco) finche' non tocca a loro.
+
+Risultato (`tools/hw_bench.py`, segmenti da 0,05 mm in rettilineo): 678 segmenti al secondo,
+contro 349 prima di questi interventi. A quel punto la coda resta piena e a limitare la
+velocita' sui segmenti minuscoli e' la regola di arresto: 15 blocchi da 0,05 mm sono 0,75 mm di
+strada per frenare, cioe' ~36 mm/s. E' il limite voluto; si alza con segmenti piu' lunghi (lo
+decide l'host quando spezza archi e curve), non con un collegamento piu' veloce.
 
 ## Limiti di corsa e alimentazione dei motori
 

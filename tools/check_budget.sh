@@ -8,7 +8,7 @@
 set -euo pipefail
 
 MAX_FLASH="${MAX_FLASH:-26000}"   # byte (limite fisico: 32256): soglia stretta, per non perdere i guadagni
-MAX_GLOBALS="${MAX_GLOBALS:-1200}" # byte: lascia almeno ~850 byte allo stack (misurato: ne usa meno di 300)
+MAX_GLOBALS="${MAX_GLOBALS:-1250}" # byte: lascia ~800 byte allo stack (misurato: ne usa circa 200)
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="${BUILD_DIR:-$ROOT/build/budget}"

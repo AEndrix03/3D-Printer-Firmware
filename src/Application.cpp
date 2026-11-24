@@ -1,5 +1,6 @@
 #include "./include/Application.hpp"
 #include "./include/hal/McuHAL.hpp"
+#include "./include/Config.hpp"
 #include "./include/SerialCommandReceiver.hpp"
 #include "./include/SafetyManager.hpp"
 #include "./include/WatchdogHandler.hpp"
@@ -31,7 +32,7 @@ void Application::init() {
     hal::init();
 
     bootTime = hal::halMillis();
-    hal::serial::begin(115200);
+    hal::serial::begin(SERIAL_BAUD);
 
     // Banner riconosciuto dal driver; la riga BOOT ne indica la causa (WDT, BROWNOUT, ...)
     hal::serial::writeP(PSTR("Avvio firmware 3DP...\r\n"));
