@@ -12,25 +12,31 @@
  * riga o per il carattere di arresto '!', e l'intestazione e' riconoscibile da
  * sola: dopo un errore la ricezione si riallinea al frame successivo.
  *
+ * Il movimento arriva gia' pianificato dall'host (vedi Planner::Plan).
+ *
  * Sequenza dei sestetti:
- *   intestazione  bit5 = velocita' presente, bit4 = campi larghi,
- *                 bit3..0 = assi presenti (X, Y, Z, E)
+ *   intestazione  bit5 = velocita' nominale e accelerazione presenti,
+ *                 bit4 = campi larghi, bit3..0 = assi presenti (X, Y, Z, E)
  *   sequenza      numero del comando modulo 64
  *   per ogni asse presente, in ordine X Y Z E:
- *                 step con segno, 2 sestetti (+-2047) oppure 3 se "campi larghi" (+-131071),
- *                 dal piu' significativo
- *   velocita'     se presente: mm/min interi, 3 sestetti (fino a 262143)
+ *                 step con segno, 2 sestetti (+-2047) oppure 3 se "campi larghi"
+ *                 (al massimo +-32767), dal piu' significativo
+ *   se bit5:      velocita' nominale, 1/64 mm/s, 3 sestetti
+ *                 accelerazione, mm/s^2, 3 sestetti
+ *                 (assenti = uguali al movimento precedente)
+ *   scala         step dell'asse dominante per mm di percorso, in 1/16, 3 sestetti
+ *   ingresso      velocita' massima di ingresso, 1/4 mm/s, 2 sestetti
  *   controllo     12 bit bassi del CRC-16/CCITT di tutti i byte precedenti, 2 sestetti
  *
- * Un segmento corto X Y E senza velocita' occupa 10 byte.
+ * Un segmento corto X Y E a velocita' invariata occupa 15 byte.
  */
 namespace MoveFrame {
     constexpr uint8_t HEADER_MARK = 0xC0;
-    constexpr uint8_t HEADER_FEED = 0x20;
+    constexpr uint8_t HEADER_PLAN = 0x20;
     constexpr uint8_t HEADER_WIDE = 0x10;
     constexpr uint8_t HEADER_AXES = 0x0F;
     constexpr uint8_t SEQUENCE_MASK = 0x3F;
-    constexpr uint8_t MAX_LENGTH = 19; // intestazione + sequenza + 4 assi larghi + velocita' + controllo
+    constexpr uint8_t MAX_LENGTH = 27; // intestazione + sequenza + 4 assi larghi + piano + scala + ingresso + controllo
 
     inline bool isHeader(uint8_t byte) { return byte >= 0xC0; }
 
@@ -42,7 +48,7 @@ namespace MoveFrame {
         for (uint8_t bit = 1; bit < 0x10; bit <<= 1) {
             if (header & bit) ++axes;
         }
-        return (uint8_t) (2 + axes * ((header & HEADER_WIDE) ? 3 : 2) + ((header & HEADER_FEED) ? 3 : 0) + 2);
+        return (uint8_t) (2 + axes * ((header & HEADER_WIDE) ? 3 : 2) + ((header & HEADER_PLAN) ? 6 : 0) + 3 + 2 + 2);
     }
 
     /** CRC-16/CCITT (stesso algoritmo di _crc_ccitt_update di avr-libc), senza tabelle. */

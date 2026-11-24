@@ -7,6 +7,7 @@ gli assi liberi di muoversi di 150 mm; non richiede finecorsa ne' termistore.
 Le righe PRF riportano: RAM minima rimasta libera, durata massima dell'interrupt
 degli step (us), scadenze mancate.
 """
+import math
 import sys, time, re
 import serial
 
@@ -66,6 +67,7 @@ def send(body, sync=False, timeout=8.0, quiet=True):
                 return code, int(d) if d else None, info
         else:
             stats['timeouts'] += 1
+            print('    nessuna risposta a %r; righe ricevute: %r' % (body, info[-4:]))
         stats['retx'] += 1
     raise RuntimeError('no answer to %r' % body)
 
@@ -87,26 +89,85 @@ def crc_update(crc, data):
     return ((((data << 8) | (crc >> 8)) ^ (data >> 4) ^ (data << 3)) & 0xFFFF)
 
 
-def move_frame(num, delta, feed=0):
-    """Frame binario di movimento (vedi src/include/MoveFrame.hpp)."""
+def move_frame(num, delta, plan, with_plan):
+    """Frame binario di movimento gia' pianificato (vedi src/include/MoveFrame.hpp).
+    plan = (velocita' nominale 1/64 mm/s, accelerazione mm/s^2, scala 1/16 step/mm, ingresso 1/4 mm/s)."""
     wide = any(abs(d) > 2047 for d in delta)
-    header = 0xC0 | (0x10 if wide else 0) | (0x20 if feed else 0)
+    header = 0xC0 | (0x10 if wide else 0) | (0x20 if with_plan else 0)
     for axis, d in enumerate(delta):
         if d:
             header |= 0x08 >> axis
     out = [header, 0x80 | (num & 0x3F)]
-    sextets = 3 if wide else 2
+
+    def put(value, sextets):
+        out.extend(0x80 | ((value >> (6 * i)) & 0x3F) for i in range(sextets - 1, -1, -1))
+
     for d in delta:
         if d:
-            value = d & 0xFFFFFFFF
-            out += [0x80 | ((value >> (6 * i)) & 0x3F) for i in range(sextets - 1, -1, -1)]
-    if feed:
-        out += [0x80 | ((feed >> (6 * i)) & 0x3F) for i in range(2, -1, -1)]
+            put(d & 0xFFFFFFFF, 3 if wide else 2)
+    if with_plan:
+        put(plan[0], 3)
+        put(plan[1], 3)
+    put(plan[2], 3)
+    put(min(plan[3], 4095), 2)
     crc = 0xFFFF
     for b in out:
         crc = crc_update(crc, b)
-    out += [0x80 | ((crc >> 6) & 0x3F), 0x80 | (crc & 0x3F)]
+    put(crc & 0x0FFF, 2)
     return bytes(out)
+
+
+# Limiti della macchina (MotionConfig.hpp): il banco prova pianifica come fa il driver,
+# in forma ridotta (tutta la sequenza in una volta, senza linear advance).
+STEPS_PER_MM = (80.0, 80.0, 400.0, 80.0)
+MAX_FEED = (5000 / 60.0, 5000 / 60.0, 150 / 60.0, 2000 / 60.0)
+MAX_ACCEL = (1000.0, 1000.0, 100.0, 1500.0)
+JUNCTION_DEVIATION = 0.02
+MAX_STEP_RATE = 10000.0
+
+
+def plan_moves(moves):
+    """moves = [(delta, mm/min)] -> [(delta, piano)] con le velocita' di giunzione gia' decise."""
+    segs = []
+    for delta, feed in moves:
+        mm = [d / k for d, k in zip(delta, STEPS_PER_MM)]
+        path = math.sqrt(mm[0] ** 2 + mm[1] ** 2 + mm[2] ** 2)
+        cartesian = path > 0
+        length = path if cartesian else abs(mm[3])
+        count = max(abs(d) for d in delta)
+        speed, accel = feed / 60.0, (MAX_ACCEL[0] if cartesian else MAX_ACCEL[3])
+        for a in range(4):
+            share = abs(mm[a]) / length
+            if share > 0:
+                speed = min(speed, MAX_FEED[a] / share)
+                accel = min(accel, MAX_ACCEL[a] / share)
+        speed = min(speed, MAX_STEP_RATE * length / count)
+        segs.append({
+            'delta': delta, 'length': length, 'cartesian': cartesian,
+            'unit': [m / length for m in mm[:3]] if cartesian else [0, 0, 0],
+            'nominal': int(speed * 64) / 64.0, 'accel': int(accel),
+            'scale': int(round(count / length * 16)), 'entry': 0.0,
+        })
+    for k in range(1, len(segs)):
+        a, b = segs[k - 1], segs[k]
+        if not (a['cartesian'] and b['cartesian']):
+            continue
+        cos = -sum(x * y for x, y in zip(a['unit'], b['unit']))
+        limit = min(a['nominal'], b['nominal'])
+        if cos < -0.999999:
+            b['entry'] = limit
+        elif cos < 0.999999:
+            half = math.sqrt(0.5 * (1 - cos))
+            b['entry'] = min(limit, math.sqrt(0.9 * min(a['accel'], b['accel']) * JUNCTION_DEVIATION * half / (1 - half)))
+    exit_speed = 0.0
+    for seg in reversed(segs):  # all'indietro: si deve poter frenare
+        seg['entry'] = min(seg['entry'], math.sqrt(exit_speed ** 2 + 1.8 * seg['accel'] * seg['length']))
+        exit_speed = seg['entry']
+    for k in range(1, len(segs)):  # in avanti: non piu' di quanto si riesce ad accelerare
+        a = segs[k - 1]
+        segs[k]['entry'] = min(segs[k]['entry'], math.sqrt(a['entry'] ** 2 + 1.8 * a['accel'] * a['length']))
+    return [(seg['delta'], (int(seg['nominal'] * 64), seg['accel'], seg['scale'], int(seg['entry'] * 4)))
+            for seg in segs]
 
 
 WINDOW_FRAMES = 4
@@ -115,16 +176,20 @@ WINDOW_BYTES = 56
 
 
 def stream(moves, timeout=8.0):
-    """Invia i movimenti binari tenendone al massimo WINDOW_FRAMES in volo. `moves` = [(delta, feed)]."""
+    """Pianifica e invia i movimenti binari tenendone al massimo WINDOW_FRAMES in volo.
+    `moves` = [(delta, mm/min)]."""
     global n
+    moves = plan_moves(moves)
+    sent_plan = None  # velocita' e accelerazione viaggiano solo quando cambiano
     pending = []  # (numero, frame)
     index = 0
     while index < len(moves) or pending:
         while index < len(moves) and len(pending) < WINDOW_FRAMES:
-            delta, feed = moves[index]
-            frame = move_frame(n + 1, delta, feed)
+            delta, plan = moves[index]
+            frame = move_frame(n + 1, delta, plan, plan[:2] != sent_plan)
             if sum(len(f) for _, f in pending) + len(frame) > WINDOW_BYTES:
                 break
+            sent_plan = plan[:2]
             n += 1
             ser.write(frame)
             pending.append((n, frame))
@@ -142,6 +207,8 @@ def stream(moves, timeout=8.0):
         code, rn = m.group(1), int(m.group(2))
         if not checksum_ok(line):
             stats['rx_corrupt'] += 1  # riga arrivata rovinata: si ignora, come fa il driver
+            if stats['rx_corrupt'] <= 8:
+                print('    riga rovinata: %r' % line)
             continue
         if code in ('OK0', 'E03') and pending and rn >= pending[0][0] and rn <= pending[-1][0]:
             # conferma cumulativa: l'OK di un movimento vale anche per quelli prima di lui
@@ -226,7 +293,7 @@ for seg_mm, feed, count in ((0.5, 3000, 600), (0.2, 3000, 600), (0.2, 4800, 800)
     moves = []
     for i in range(count):
         dy = 4 if i % 2 == 0 else -4
-        moves.append(((int(round(seg_mm * 80)), dy, 0, 1), feed if i == 0 else 0))
+        moves.append(((int(round(seg_mm * 80)), dy, 0, 1), feed))
     stream(moves)
     stream_time = time.time() - t
     wait_idle()

@@ -8,7 +8,7 @@ terminale prima di inviare il successivo.
 
 ```
 N<numero> <categoria><codice> [parametri] *<checksum>
-N124 M11 X100.5 Y200.3 E0.4213 F3000 *87
+N124 T10 S205 *72
 ```
 
 - `checksum`: XOR di tutti i caratteri prima di ` *`, in decimale. E' obbligatorio.
@@ -40,11 +40,11 @@ N124 M11 X100.5 Y200.3 E0.4213 F3000 *87
 
 ## Movimenti in coda
 
-I comandi di movimento (`M10`, `M11`, `A10`-`A13`) **non aspettano la fine del
-movimento**: rispondono `OK` appena il segmento e' nella coda del planner (7 posti)
-oppure, a coda piena, appena se ne libera uno. Mentre la macchina si muove l'host
-invia gia' i segmenti successivi e il planner li raccorda senza fermate (lookahead
-con junction deviation); gli step sono generati in interrupt di timer.
+I movimenti (frame binari, `A10`-`A13`) **non aspettano la fine del movimento**:
+rispondono `OK` appena il segmento e' nella coda (15 posti) oppure, a coda piena, appena
+se ne libera uno. Mentre la macchina si muove l'host invia gia' i segmenti successivi, che
+si raccordano senza fermate; gli step sono generati in interrupt di timer. Il piano di
+velocita' lo calcola l'host: vedi "Chi pianifica cosa".
 
 Conseguenze per l'host:
 
@@ -88,8 +88,8 @@ Vedi `contracts/*.json`. In sintesi:
 
 | Cmd | Descrizione |
 |-----|-------------|
-| `M10 X Y Z E F` | movimento relativo (mm, mm/min); rifiutato con `ERR LIMIT` se esce dal volume di lavoro |
-| `M11 X Y Z E F` | movimento assoluto; assi omessi invariati; `E` sempre relativo |
+| frame binario | movimento relativo in step, gia' pianificato (vedi "Movimenti in formato binario"); rifiutato con `ERR LIMIT` se esce dal volume di lavoro. I vecchi `M10`/`M11` di testo non esistono piu' |
+| `M115` | dati per pianificare: `SPM`, `LIM`, `TRV` e `CRT STP` (vedi sotto) |
 | `M12 X Y Z` | dichiara la posizione corrente; gli assi indicati diventano riferiti |
 | `M114` | posizione reale in questo istante -> `CRT POS x y z <r>`; `r`=1 se riferita (homing o `M12` dall'accensione) |
 | `M0` | emergency stop: ferma gli step e toglie corrente ai motori |
@@ -105,7 +105,7 @@ Vedi `contracts/*.json`. In sintesi:
 | `S11` | diagnostica -> `DIA <uptime s> <reset> <ultimo N> <err cs> <err overflow> <ACK persi> <RAM libera>` e `PRF <RAM minima mai rimasta libera> <durata max interrupt step, us> <scadenze step mancate>` |
 
 I movimenti sono segmenti rettilinei; archi (G2/G3) e spline (G5) vengono spezzati
-dal driver con errore di corda di 0,02 mm e raccordati dal planner del firmware.
+dal driver con errore di corda di 0,02 mm e raccordati dal suo pianificatore.
 
 ## Tenere d'occhio RAM e CPU
 
@@ -142,8 +142,9 @@ Cosa dicono:
 - accorciare la risposta non aiuta (a volte peggiora, per come l'adattatore USB raggruppa i byte);
 - oltre 250000 baud non si guadagna nulla: il limite e' il millisecondo del frame USB.
 
-Il firmware reale oggi fa ~79 movimenti al secondo perche' a questi tempi aggiunge ~4,7 ms di
-pianificazione per segmento.
+Quando queste misure sono state fatte il firmware reale faceva ~79 movimenti al secondo, perche'
+a questi tempi aggiungeva ~4,7 ms di pianificazione per segmento: e' il motivo per cui la
+pianificazione e' passata all'host (vedi "Chi pianifica cosa").
 
 - **Guardia sullo stack.** Se lo stack arriva a meno di 128 byte dalle variabili il firmware
   spegne l'heater, ferma i motori e invia `ALM STACK`: sull'ATmega non c'e' protezione di
@@ -172,6 +173,10 @@ caratteri mancanti: decine per prova, contro zero con la scrittura diretta e zer
 ritardo puro della stessa durata. Il meccanismo non e' stato chiarito; `tools/hw_bench.py`
 verifica il checksum di ogni riga e fallisce se ne arriva rovinata piu' di una.
 
+Punto aperto: con il firmware attuale una esecuzione del banco prova su sette ha comunque
+ricevuto 15 righe rovinate (e tre risposte mai arrivate); le altre sei nessuna. Il protocollo
+le assorbe (checksum, ritrasmissione), ma la causa resta da trovare.
+
 ### Misure sulla scheda reale
 
 `tools/hw_bench.py <porta>` esegue sulla scheda movimenti veloci, a quattro assi e flussi di
@@ -180,24 +185,60 @@ segmenti corti, e stampa `DIA`/`PRF` dopo ogni fase. Valori misurati su un ATmeg
 
 | Grandezza | Valore |
 |-----------|--------|
-| RAM minima rimasta libera (picco di stack) | 848 byte (606 all'inizio) |
-| Durata massima dell'interrupt degli step | 67 us (124 prima della tabella degli intervalli) |
+| RAM minima rimasta libera (picco di stack) | 731 byte con la coda da 16 blocchi (848 con 8, 606 all'inizio) |
+| Durata massima dell'interrupt degli step | 57 us (67 con i contatori a 32 bit, 124 prima della tabella degli intervalli) |
 | Scadenze degli step mancate | 0 |
 | Errori di checksum / ritrasmissioni su ~2000 comandi | 0 |
 | Giro completo di un comando senza lavoro (`S10`) | 7,9 ms |
-| Giro completo di un movimento (`M10` con E) | 12,6 ms, cioe' ~79 segmenti/s |
-| Movimenti binari, 4 in volo | 173-218 segmenti/s |
+| Movimenti di testo, uno alla volta (formato non piu' in uso) | ~79 segmenti/s |
+| Movimenti binari pianificati dal firmware (prima) | 173-218 segmenti/s |
+| Movimenti binari pianificati dall'host (ora), segmenti da 0,1 mm | 270 segmenti/s |
+| Memoria di programma | 24.736 byte su 32.256 (27.554 con il pianificatore in virgola mobile) |
 | Arresto con `!` da 50 mm/s | 0,07 s |
 
 Il collo di bottiglia per le curve fitte e' il giro del comando (stop-and-wait su USB), non
 il generatore di step: a 79 segmenti/s, segmenti da 0,2 mm passano a ~16 mm/s.
 
+## Chi pianifica cosa
+
+Il lavoro e' diviso cosi':
+
+- **L'host (driver) pianifica.** In doppia precisione calcola, per ogni segmento: velocita'
+  nominale e accelerazione entro i limiti di ogni asse, velocita' alle giunzioni ("junction
+  deviation"), passate avanti e indietro, linear advance. Il firmware riceve il risultato.
+- **Il firmware garantisce l'arresto.** Con soli interi controlla che la macchina possa sempre
+  fermarsi entro i movimenti gia' in coda: ogni blocco entra al massimo alla velocita' chiesta
+  dall'host, ma mai piu' veloce di quanto consenta la frenata lungo i blocchi che seguono
+  (l'ultimo in coda finisce da fermo). Lo fa anche se l'host sbaglia o smette di inviare.
+  In piu': parte sempre da fermo, non supera `MAX_STEP_RATE`, e ogni cambio di velocita' resta
+  entro l'accelerazione del blocco.
+
+L'host pianifica guardando avanti solo quanto la coda del firmware puo' contenere (10 blocchi
+su 15) e con le stesse formule intere: finche' tiene la coda piena, il firmware esegue
+esattamente il piano ricevuto, ed e' su quelle velocita' che l'host calcola il linear advance.
+Se l'host resta indietro la macchina rallenta da sola, e l'unico effetto e' un linear advance
+meno preciso in quel tratto.
+
+Partendo da fermo il firmware aspetta 30 ms (o 4 blocchi in coda) prima di muoversi: un blocco
+gia' partito non puo' piu' essere ripianificato, e con la coda vuota dovrebbe finire da fermo.
+
+I movimenti decisi dal firmware (homing, diagnosi, `A10`-`A13`) sono di un solo asse, da fermo
+a fermo, con i limiti di `MotionConfig.hpp`.
+
+**`M115`** da' all'host tutto quello che serve, cosi' i limiti restano scritti in un posto solo:
+
+| Riga | Contenuto |
+|------|-----------|
+| `SPM <x> <y> <z> <e>` | step per mm |
+| `LIM <fx> <fy> <fz> <fe> <axy> <az> <ae> <jd> <rate> <coda>` | velocita' massime (mm/min), accelerazioni (mm/s^2), deviazione di giunzione (micron), step/s massimi, blocchi utilizzabili della coda |
+| `TRV <x> <y> <z> <assi>` | corsa massima in step e maschera degli assi riferiti (bit0 X, bit1 Y, bit2 Z): l'host rifiuta da se' un movimento fuori volume, prima di spezzarlo in piu' blocchi |
+| `CRT STP <x> <y> <z>` | posizione in step alla fine dei movimenti in coda |
+
 ## Movimenti in formato binario
 
-I movimenti di una stampa non viaggiano come testo: il driver li invia come frame binari,
-in step gia' calcolati (nessuna virgola mobile da convertire sul firmware), e ne tiene fino a
-quattro in volo senza attendere ogni risposta. I comandi di testo (`M10`, `M11`, ...) restano
-validi e sono sempre uno alla volta.
+I movimenti non viaggiano come testo: il driver li invia come frame binari, in step e gia'
+pianificati (sul firmware nessun calcolo in virgola mobile), e ne tiene fino a quattro in volo
+senza attendere ogni risposta. I comandi di testo sono sempre uno alla volta.
 
 Ogni byte del frame ha il bit 7 a 1 e porta 6 bit utili (un "sestetto"): l'intestazione e'
 `11xxxxxx`, gli altri byte `10xxxxxx`. Un byte di movimento non puo' quindi essere scambiato
@@ -206,14 +247,18 @@ la ricezione si riallinea al frame successivo, senza attese.
 
 | Campo | Sestetti | Contenuto |
 |-------|----------|-----------|
-| intestazione | 1 | bit5 velocita' presente, bit4 campi larghi, bit3..0 assi presenti (X Y Z E) |
+| intestazione | 1 | bit5 velocita' nominale e accelerazione presenti, bit4 campi larghi, bit3..0 assi presenti (X Y Z E) |
 | sequenza | 1 | numero del comando modulo 64 |
-| un campo per asse presente | 2 (3 se larghi) | step relativi con segno: +-2047 (+-131071 se larghi) |
-| velocita' | 3, se presente | mm/min interi; assente = resta l'ultima |
+| un campo per asse presente | 2 (3 se larghi) | step relativi con segno: +-2047 (+-32767 se larghi) |
+| velocita' nominale | 3, se bit5 | 1/64 mm/s lungo il percorso |
+| accelerazione | 3, se bit5 | mm/s^2 lungo il percorso |
+| scala | 3 | step dell'asse dominante per mm di percorso, in 1/16 |
+| ingresso | 2 | velocita' massima di ingresso nel blocco, in 1/4 mm/s (0 = da fermo) |
 | controllo | 2 | 12 bit bassi del CRC-16/CCITT dei byte precedenti |
 
-Un segmento corto su X, Y ed E occupa 10 byte (38 caratteri in testo). La specifica in codice e'
-`src/include/MoveFrame.hpp`.
+Velocita' nominale e accelerazione valgono finche' non cambiano: un segmento corto su X, Y ed E
+a velocita' invariata occupa 15 byte. La specifica in codice e' `src/include/MoveFrame.hpp`;
+le unita' sono spiegate in `src/include/motion/Planner.hpp`.
 
 Regole:
 
@@ -221,24 +266,25 @@ Regole:
 - **Frame corrotto o incompleto**: `E01 N<atteso>`; i frame gia' in volo dietro di lui ricevono
   `E04 N<atteso>`. Il driver rispedisce da `<atteso>`.
 - **Frame gia' ricevuto** (risposta andata persa, frame rispedito): `E03`, non viene rieseguito.
-- **Rifiuto** (`ERR LIMIT`, `COLD_EXT`, `INV_STATE`) **o arresto `!`**: i frame successivi vengono
-  scartati con `ERR SKIPPED` finche' non arriva un comando di testo. I movimenti in volo non
-  partono mai da una posizione diversa da quella prevista dal driver.
+- **Rifiuto** (`ERR LIMIT`, `COLD_EXT`, `INV_STATE`, `RANGE` = piu' di 32767 step su un asse,
+  `NO_PLAN` = velocita' mai ricevute, per esempio dopo un riavvio) **o arresto `!`**: i frame
+  successivi vengono scartati con `ERR SKIPPED` finche' non arriva un comando di testo. I
+  movimenti in volo non partono mai da una posizione diversa da quella prevista dal driver.
 - **`!`** viene riconosciuto nell'interrupt di ricezione, quindi e' immediato anche con altri
   comandi in attesa nel buffer.
-- **`M115`** restituisce `SPM <step/mm X Y Z E>` e `CRT STP <x> <y> <z>`: il driver tiene una
-  copia della posizione in step e la rilegge ogni volta che puo' essere cambiata senza che lui
-  lo sappia (arresto, allarme, homing, `M12`, rifiuto, riavvio).
+- Il driver tiene una copia della posizione in step e la rilegge con `M115` ogni volta che puo'
+  essere cambiata senza che lui lo sappia (arresto, allarme, homing, `M12`, rifiuto, riavvio).
 - Il firmware elabora **un comando per giro** del ciclo principale: tra un comando e il
   successivo watchdog, sicurezza e temperatura vengono sempre aggiornati, anche con il buffer
   di ricezione sempre pieno.
 
-Misurato sulla scheda reale (`tools/hw_bench.py`): da ~79 a 173-218 segmenti al secondo, senza
-errori ne' ritrasmissioni. Il limite e' ora il tempo di pianificazione del firmware per segmento.
+Misurato sulla scheda reale (`tools/hw_bench.py`): 270 segmenti al secondo con segmenti da
+0,1 mm (173-218 quando pianificava il firmware, ~79 con i comandi di testo). Il limite e' ora
+la riga di risposta, che il firmware trasmette restando in attesa (~1,8 ms su ~3,7 per segmento).
 
 ## Limiti di corsa e alimentazione dei motori
 
-- **Limiti software.** Un movimento (`M10`, `M11`) che porterebbe un asse riferito fuori da
+- **Limiti software.** Un movimento che porterebbe un asse riferito fuori da
   `[0, TRAVEL_MAX]` (`MotionConfig.hpp`, 220 x 220 x 200 mm) viene rifiutato per intero con
   `ERR LIMIT` e nessuno step viene eseguito. Lo zero e' il finecorsa. Un asse diventa riferito
   con l'homing (`S0`) o con `M12`; finche' non lo e' i limiti non si applicano. Un asse che si

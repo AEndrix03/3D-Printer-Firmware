@@ -7,8 +7,8 @@
 #   tools/check_budget.sh --symbols  elenca anche le variabili che occupano piu' RAM
 set -euo pipefail
 
-MAX_FLASH="${MAX_FLASH:-28500}"   # byte (limite fisico: 32256): soglia stretta, per non perdere i guadagni
-MAX_GLOBALS="${MAX_GLOBALS:-1000}" # byte: lascia almeno ~1050 byte allo stack
+MAX_FLASH="${MAX_FLASH:-26000}"   # byte (limite fisico: 32256): soglia stretta, per non perdere i guadagni
+MAX_GLOBALS="${MAX_GLOBALS:-1200}" # byte: lascia almeno ~850 byte allo stack (misurato: ne usa meno di 300)
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="${BUILD_DIR:-$ROOT/build/budget}"

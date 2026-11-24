@@ -113,6 +113,13 @@ namespace {
         return (value & sign) ? (int32_t) value - (int32_t) (sign << 1) : (int32_t) value;
     }
 
+    /** Legge un campo senza segno; i valori oltre 16 bit diventano 65535. */
+    uint16_t readUnsigned(uint8_t &at, uint8_t sextets) {
+        uint32_t value = 0;
+        for (uint8_t i = 0; i < sextets; ++i) value = (value << 6) | ((uint8_t) inputBuffer[at++] & 0x3F);
+        return value > 0xFFFF ? 0xFFFF : (uint16_t) value;
+    }
+
     void processFrame() {
         using namespace SerialCommandReceiver;
         const uint8_t length = frameLength;
@@ -154,16 +161,19 @@ namespace {
         for (uint8_t axis = 0; axis < 4; ++axis) {
             if (header & (uint8_t) (0x08 >> axis)) delta[axis] = readSigned(at, sextets);
         }
-        uint32_t feedrate = 0;
-        if (header & MoveFrame::HEADER_FEED) {
-            for (uint8_t i = 0; i < 3; ++i) feedrate = (feedrate << 6) | ((uint8_t) inputBuffer[at++] & 0x3F);
+        Planner::Plan plan = {0, 0, 0, 0};
+        if (header & MoveFrame::HEADER_PLAN) {
+            plan.nominalSpeed = readUnsigned(at, 3);
+            plan.acceleration = readUnsigned(at, 3);
         }
+        plan.stepScale = readUnsigned(at, 3);
+        plan.entrySpeed = (uint16_t) (readUnsigned(at, 2) << 4); // da 1/4 a 1/64 mm/s
 
         // --- esecuzione: esattamente una risposta terminale ---
         CompactResponse::takeResult();
         SafetyManager::notifyCommandReceived();
         BusyHandler::start();
-        MotionController::handleStreamMove(delta, feedrate, number);
+        MotionController::handleStreamMove(delta, plan, number);
         BusyHandler::stop();
         SafetyManager::notifyCommandReceived();
 

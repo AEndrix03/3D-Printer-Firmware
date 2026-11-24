@@ -15,9 +15,16 @@ namespace {
 
     constexpr uint16_t IDLE_TICKS = 2000; // a coda vuota l'interrupt controlla ogni millisecondo
 
+    // Partendo da fermi si aspetta che la coda si riempia un po' (o che passi questo tempo):
+    // il primo blocco non puo' piu' cambiare una volta partito, e con la coda vuota
+    // dovrebbe finire da fermo anche se i successivi stanno arrivando.
+    constexpr uint8_t START_QUEUE = 4;
+    constexpr uint8_t START_DELAY_MS = 30;
+
     Block *current = nullptr;
-    uint32_t counter[AX_COUNT];
-    uint32_t completed = 0;
+    uint16_t counter[AX_COUNT];
+    uint16_t completed = 0;
+    uint8_t startDelay = 0;
     uint32_t rateFixed = 0; // velocita' attuale, step/s in virgola fissa 16.16
     uint16_t timerTicks = IDLE_TICKS;
 
@@ -141,22 +148,32 @@ namespace Stepper {
     void isr() {
         // --- carica il prossimo blocco ---
         if (!current) {
-            current = Planner::acquireBlock();
-            if (!current) {
-                running = false;
-                if (holding) stopNow(); // arresto richiesto e coda gia' esaurita
+            if (!running && !holding && !Planner::isEmpty() && Planner::queued() < START_QUEUE &&
+                startDelay < START_DELAY_MS) {
+                ++startDelay; // l'interrupt a riposo scatta ogni millisecondo
                 hal::stepTimer::setInterval(IDLE_TICKS);
                 return;
             }
+            current = (!running && holding) ? nullptr : Planner::acquireBlock();
+            if (!current) {
+                running = false;
+                startDelay = 0;
+                if (holding) stopNow(); // arresto richiesto da fermi, o coda gia' esaurita
+                hal::stepTimer::setInterval(IDLE_TICKS);
+                return;
+            }
+            startDelay = 0;
 
-            const uint32_t half = current->stepEventCount >> 1;
+            const uint16_t half = current->stepEventCount >> 1;
             for (uint8_t a = 0; a < AX_COUNT; ++a) counter[a] = half;
             completed = 0;
             setDirections(current->directionBits);
 
             if (!running) {
-                // partenza da fermo: velocita' iniziale pianificata
-                rateFixed = (uint32_t) current->initialRate << 16;
+                // Partenza da fermo: sempre dalla velocita' "da fermo" del blocco, anche se il piano
+                // ricevuto dichiara un ingresso piu' veloce (la macchina e' ferma: e' un fatto)
+                rateFixed = (uint32_t) (current->initialRate < current->standstillRate
+                                        ? current->initialRate : current->standstillRate) << 16;
                 running = true;
             } else if ((uint16_t) (rateFixed >> 16) > current->nominalRate) {
                 rateFixed = (uint32_t) current->nominalRate << 16;

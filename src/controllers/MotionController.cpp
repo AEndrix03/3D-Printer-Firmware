@@ -7,6 +7,7 @@
 #include "../include/SafetyManager.hpp"
 #include "../include/motion/MotionConfig.hpp"
 #include "../include/motion/HomingConfig.hpp"
+#include "../include/extruder/ExtruderConfig.hpp"
 #include "../include/motion/Planner.hpp"
 #include "../include/motion/Stepper.hpp"
 #include "../include/endstop/EndstopConfig.hpp"
@@ -23,8 +24,10 @@ namespace {
     using Planner::AX_E;
     using Planner::AX_COUNT;
 
-    float eRemainder = 0.0f;      // frazione di step E non ancora eseguita (evita deriva di estrusione)
-    float lastFeedrate = 1000.0f; // F e' modale
+    // Velocita' nominale e accelerazione dell'ultimo movimento ricevuto: l'host le invia
+    // solo quando cambiano. 0 = non ancora note.
+    uint16_t streamSpeed = 0;
+    uint16_t streamAcceleration = 0;
     bool abortRequested = false;
     bool streamLatched = false;   // movimenti binari scartati fino al prossimo comando di testo
     bool referenced = false;
@@ -62,7 +65,6 @@ namespace {
     void resyncAfterStop() {
         if (!Stepper::consumeStopEvent()) return;
         for (uint8_t a = 0; a < AX_COUNT; ++a) Planner::setPosition(a, Stepper::position(a));
-        eRemainder = 0.0f;
     }
 
     /**
@@ -98,8 +100,8 @@ namespace {
         abortRequested = false;
     }
 
-    /** Accoda un segmento, aspettando un posto libero se serve. */
-    bool enqueue(const int32_t *delta, float feedrate, uint32_t commandNumber, uint8_t flags = 0) {
+    /** Accoda un movimento gia' pianificato, aspettando un posto libero se serve. */
+    bool enqueue(const int32_t *delta, const Planner::Plan &plan, uint32_t commandNumber, uint8_t flags = 0) {
         while (Planner::isFull()) {
             if (!waitTask()) {
                 reportInterrupted();
@@ -108,46 +110,49 @@ namespace {
         }
         // I motori spenti (emergenza rientrata, risparmio energetico) si riaccendono al primo movimento
         if (!motorsOn) MotionController::setEnabled(true);
-        Planner::addLine(delta, feedrate, commandNumber, flags);
+        Planner::addBlock(delta, plan, commandNumber, flags);
         return true;
     }
 
-    void handleMove(bool absolute, const char *params, uint32_t commandNumber) {
-        if (StateMachine::getState() != MachineState::Printing) {
-            CompactResponse::reject(PSTR("INV_STATE"));
-            return;
+    /**
+     * Movimento di un solo asse deciso dal firmware (homing, diagnosi, comandi dell'estrusore):
+     * parte e arriva da fermo, entro i limiti dell'asse. Le corse lunghe diventano piu' blocchi.
+     */
+    bool moveAxis(uint8_t axis, int32_t steps, float feedrate, uint32_t commandNumber, uint8_t flags = 0) {
+        float spm, maxFeed, acceleration;
+        if (axis == AX_E) {
+            spm = ExtruderController::getStepsPerMm();
+            maxFeed = ExtruderConfig::MAX_FEEDRATE_E;
+            acceleration = MotionConfig::ACCELERATION_E;
+        } else if (axis == AX_Z) {
+            spm = MotionConfig::STEPS_PER_MM_Z;
+            maxFeed = MotionConfig::MAX_FEEDRATE_Z;
+            acceleration = MotionConfig::ACCELERATION_Z;
+        } else {
+            spm = stepsPerMm(axis);
+            maxFeed = MotionConfig::MAX_FEEDRATE_X;
+            acceleration = MotionConfig::ACCELERATION_XY;
         }
-        settle();
+        if (feedrate > maxFeed) feedrate = maxFeed;
+        if (feedrate < MotionConfig::MIN_FEEDRATE) feedrate = MotionConfig::MIN_FEEDRATE;
+
+        Planner::Plan plan;
+        plan.nominalSpeed = (uint16_t) (feedrate * (64.0f / 60.0f));
+        plan.acceleration = (uint16_t) acceleration;
+        plan.stepScale = (uint16_t) (spm * 16.0f);
+        plan.entrySpeed = 0;
 
         int32_t delta[AX_COUNT] = {0, 0, 0, 0};
-        float v;
-
-        for (uint8_t a = 0; a < 3; ++a) {
-            if (ParamParser::get(params, (char) ('X' + a), v)) {
-                delta[a] = lround(v * stepsPerMm(a)) - (absolute ? Planner::position(a) : 0);
-            }
+        while (steps != 0) {
+            int32_t part = steps;
+            if (part > Planner::MAX_BLOCK_STEPS) part = Planner::MAX_BLOCK_STEPS;
+            if (part < -Planner::MAX_BLOCK_STEPS) part = -Planner::MAX_BLOCK_STEPS;
+            delta[axis] = part;
+            if (!enqueue(delta, plan, commandNumber, flags)) return false;
+            steps -= part;
+            plan.entrySpeed = plan.nominalSpeed; // i blocchi successivi proseguono sulla stessa retta
         }
-        if (!withinTravel(delta)) {
-            CompactResponse::reject(PSTR("LIMIT"));
-            return;
-        }
-        if (ParamParser::get(params, 'E', v) && v != 0.0f) {
-            if (!ExtruderController::canExtrude()) {
-                CompactResponse::reject(PSTR("COLD_EXT"));
-                return;
-            }
-            // E e' sempre relativo; il resto frazionario viene riportato al movimento successivo
-            const float exact = v * ExtruderController::getStepsPerMm() + eRemainder;
-            delta[AX_E] = lround(exact);
-            eRemainder = exact - (float) delta[AX_E];
-        }
-        if (ParamParser::get(params, 'F', v) && v > 0.0f) {
-            lastFeedrate = v;
-        }
-
-        if (delta[AX_X] || delta[AX_Y] || delta[AX_Z] || delta[AX_E]) {
-            enqueue(delta, lastFeedrate, commandNumber);
-        }
+        return true;
     }
 
     /**
@@ -157,10 +162,9 @@ namespace {
     int32_t seek(uint8_t axis, bool positive, int32_t maxSteps, float feedrate, bool untilEndstop,
                  uint32_t commandNumber) {
         const int32_t before = Stepper::position(axis);
-        int32_t delta[AX_COUNT] = {0, 0, 0, 0};
-        delta[axis] = positive ? maxSteps : -maxSteps;
 
-        if (!enqueue(delta, feedrate, commandNumber, untilEndstop ? Planner::FLAG_SEEK_ENDSTOP : 0)) return -1;
+        if (!moveAxis(axis, positive ? maxSteps : -maxSteps, feedrate, commandNumber,
+                      untilEndstop ? Planner::FLAG_SEEK_ENDSTOP : 0)) return -1;
         if (!MotionController::synchronize()) return -1;
         resyncAfterStop();
 
@@ -246,7 +250,8 @@ namespace MotionController {
         limitAxes = 0;
         pinMode(PIN_STEPPERS_ENABLE, OUTPUT);
         setEnabled(true);
-        eRemainder = 0.0f;
+        streamSpeed = 0;
+        streamAcceleration = 0;
         Planner::init();
         Stepper::init();
     }
@@ -299,7 +304,7 @@ namespace MotionController {
         streamLatched = false;
     }
 
-    void handleStreamMove(const int32_t *delta, uint32_t feedrate, uint32_t commandNumber) {
+    void handleStreamMove(const int32_t *delta, Planner::Plan plan, uint32_t commandNumber) {
         if (StateMachine::getState() == MachineState::Error) {
             CompactResponse::begin(PSTR("ERR"));
             CompactResponse::addStr(SafetyManager::getErrorReason());
@@ -312,8 +317,21 @@ namespace MotionController {
             return;
         }
 
+        if (plan.nominalSpeed) {
+            streamSpeed = plan.nominalSpeed;
+            streamAcceleration = plan.acceleration;
+        } else {
+            plan.nominalSpeed = streamSpeed;
+            plan.acceleration = streamAcceleration;
+        }
+
         PGM_P refusal = nullptr;
-        if (StateMachine::getState() != MachineState::Printing) {
+        if (plan.nominalSpeed == 0 || plan.acceleration == 0 || plan.stepScale == 0) {
+            refusal = PSTR("NO_PLAN"); // velocita' mai ricevute (firmware riavviato): l'host deve riallinearsi
+        } else if (labs(delta[AX_X]) > Planner::MAX_BLOCK_STEPS || labs(delta[AX_Y]) > Planner::MAX_BLOCK_STEPS ||
+                   labs(delta[AX_Z]) > Planner::MAX_BLOCK_STEPS || labs(delta[AX_E]) > Planner::MAX_BLOCK_STEPS) {
+            refusal = PSTR("RANGE");
+        } else if (StateMachine::getState() != MachineState::Printing) {
             refusal = PSTR("INV_STATE");
         } else {
             settle();
@@ -326,9 +344,8 @@ namespace MotionController {
             return;
         }
 
-        if (feedrate > 0) lastFeedrate = (float) feedrate;
         if (delta[AX_X] || delta[AX_Y] || delta[AX_Z] || delta[AX_E]) {
-            if (!enqueue(delta, lastFeedrate, commandNumber)) streamLatched = true; // interrotto in attesa
+            if (!enqueue(delta, plan, commandNumber)) streamLatched = true; // interrotto in attesa
         }
     }
 
@@ -343,9 +360,7 @@ namespace MotionController {
             return false;
         }
         settle();
-        if (steps == 0) return true;
-        const int32_t delta[AX_COUNT] = {0, 0, 0, steps};
-        return enqueue(delta, feedrate, commandNumber);
+        return moveAxis(AX_E, steps, feedrate, commandNumber);
     }
 
     bool isPositionReferenced() {
@@ -359,7 +374,6 @@ namespace MotionController {
     void resetExtruderSteps() {
         Stepper::setPosition(AX_E, 0);
         Planner::setPosition(AX_E, 0);
-        eRemainder = 0.0f;
     }
 
     position::Position getPosition() {
@@ -370,7 +384,7 @@ namespace MotionController {
         return p;
     }
 
-    void handle(uint8_t code, const char *params, uint32_t commandNumber) {
+    void handle(uint8_t code, const char *params, uint32_t /*commandNumber*/) {
         if (StateMachine::getState() == MachineState::Error && code != 0 && code != 114 && code != 115) {
             CompactResponse::begin(PSTR("ERR"));
             CompactResponse::addStr(SafetyManager::getErrorReason());
@@ -380,12 +394,6 @@ namespace MotionController {
         }
 
         switch (code) {
-            case 10:
-                handleMove(false, params, commandNumber);
-                break;
-            case 11:
-                handleMove(true, params, commandNumber);
-                break;
             case 12: {
                 if (!synchronize()) break;
                 settle();
@@ -437,6 +445,27 @@ namespace MotionController {
                 CompactResponse::addFloat(MotionConfig::STEPS_PER_MM_Y, 2);
                 CompactResponse::addFloat(MotionConfig::STEPS_PER_MM_Z, 2);
                 CompactResponse::addFloat(ExtruderController::getStepsPerMm(), 2);
+                CompactResponse::end();
+                // Limiti della macchina: l'host pianifica con questi, cosi' restano scritti in un posto solo
+                CompactResponse::begin(PSTR("LIM"));
+                CompactResponse::addInt((int32_t) MotionConfig::MAX_FEEDRATE_X);
+                CompactResponse::addInt((int32_t) MotionConfig::MAX_FEEDRATE_Y);
+                CompactResponse::addInt((int32_t) MotionConfig::MAX_FEEDRATE_Z);
+                CompactResponse::addInt((int32_t) ExtruderConfig::MAX_FEEDRATE_E);
+                CompactResponse::addInt((int32_t) MotionConfig::ACCELERATION_XY);
+                CompactResponse::addInt((int32_t) MotionConfig::ACCELERATION_Z);
+                CompactResponse::addInt((int32_t) MotionConfig::ACCELERATION_E);
+                CompactResponse::addInt((int32_t) (MotionConfig::JUNCTION_DEVIATION * 1000.0f)); // micron
+                CompactResponse::addInt(MotionConfig::MAX_STEP_RATE);
+                CompactResponse::addInt(Planner::BLOCK_BUFFER_SIZE - 1);
+                CompactResponse::end();
+                // Corsa massima in step e assi su cui vale: l'host rifiuta da se' un movimento
+                // fuori volume prima di spezzarlo in piu' blocchi (qui il controllo resta comunque)
+                CompactResponse::begin(PSTR("TRV"));
+                for (uint8_t a = 0; a < 3; ++a) {
+                    CompactResponse::addInt((int32_t) pgm_read_dword(&TRAVEL_MAX_STEPS[a]));
+                }
+                CompactResponse::addInt(MotionConfig::SOFT_LIMITS_ENABLED ? limitAxes : 0);
                 CompactResponse::end();
                 settle();
                 CompactResponse::begin(PSTR("STP"), true);

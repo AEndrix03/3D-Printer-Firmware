@@ -1,33 +1,11 @@
 {
   "category": "M",
-  "description": "Motion controller",
+  "description": "Motion controller. Moves are sent as binary planned frames (see PROTOCOL.md), not as text commands",
   "commands": [
     {
       "code": 0,
       "name": "Emergency Stop",
       "params": []
-    },
-    {
-      "code": 10,
-      "name": "Move Relative",
-      "params": [
-        "X",
-        "Y",
-        "Z",
-        "E",
-        "F"
-      ]
-    },
-    {
-      "code": 11,
-      "name": "Move Absolute (omitted axes unchanged, E relative)",
-      "params": [
-        "X",
-        "Y",
-        "Z",
-        "E",
-        "F"
-      ]
     },
     {
       "code": 12,
@@ -49,6 +27,11 @@
     {
       "code": 114,
       "name": "Get Position",
+      "params": []
+    },
+    {
+      "code": 115,
+      "name": "Planning data: steps per mm (SPM), machine limits (LIM), travel (TRV), step position (STP)",
       "params": []
     }
   ]

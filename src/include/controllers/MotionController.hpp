@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include "../motion/Position.hpp"
+#include "../motion/Planner.hpp"
 
 /**
  * @brief Gestisce i movimenti della macchina lungo gli assi XYZ, coordinati con l'estrusore.
@@ -21,28 +22,27 @@ namespace MotionController {
     /**
      * @brief Gestisce un comando di movimento.
      *  - 0:   emergency stop
-     *  - 10:  movimento relativo  (X Y Z E in mm, F in mm/min) - accodato.
-     *         10 e 11 rifiutano (ERR LIMIT) i movimenti oltre il volume di lavoro
-     *  - 11:  movimento assoluto  (X Y Z assoluti, assi omessi invariati; E relativo) - accodato
      *  - 12:  imposta la posizione corrente (X Y Z) - attende la fine dei movimenti.
      *         Gli assi impostati diventano riferiti: da li' valgono i limiti di corsa
      *  - 99:  diagnosi asse
      *  - 114: posizione reale in questo istante -> "CRT POS x y z <riferita 0/1>"
-     *  - 115: posizione in step e step/mm -> "SPM sx sy sz se" e "CRT STP x y z"
+     *  - 115: step/mm, limiti della macchina e posizione in step -> "SPM ...", "LIM ...", "CRT STP x y z"
+     * I movimenti arrivano solo in formato binario, gia' pianificati (handleStreamMove).
      */
     void handle(uint8_t code, const char *params, uint32_t commandNumber);
 
     /**
-     * @brief Movimento ricevuto in formato binario (vedi MoveFrame.hpp): step relativi
-     * gia' calcolati dall'host, nessuna conversione da testo.
+     * @brief Movimento ricevuto in formato binario (vedi MoveFrame.hpp): step relativi e
+     * piano di velocita' gia' calcolati dall'host. Rifiuta (ERR LIMIT) i movimenti oltre il
+     * volume di lavoro.
      * @param delta step con segno per X, Y, Z, E
-     * @param feedrate mm/min; 0 = invariata
+     * @param plan nominalSpeed = 0: velocita' nominale e accelerazione invariate
      *
      * Dopo un rifiuto o un arresto i movimenti binari successivi vengono scartati
      * (ERR SKIPPED) finche' non arriva un comando di testo: l'host puo' averne altri
      * gia' in volo, e non devono partire da una posizione che non e' quella prevista.
      */
-    void handleStreamMove(const int32_t *delta, uint32_t feedrate, uint32_t commandNumber);
+    void handleStreamMove(const int32_t *delta, Planner::Plan plan, uint32_t commandNumber);
 
     /** Un comando di testo e' arrivato: l'host si e' riallineato, i movimenti binari ripartono. */
     void releaseStream();
