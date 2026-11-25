@@ -20,6 +20,9 @@ namespace {
 
     void put(char c) {
         if (txLen < sizeof(txBuf) - 1) txBuf[txLen++] = c;
+        // Riga troppo lunga: non la si taglia in silenzio, l'ultimo carattere diventa '~' e chi
+        // riceve sa che manca qualcosa (un numero tagliato a meta' sembrerebbe un valore valido)
+        else txBuf[sizeof(txBuf) - 2] = '~';
     }
 
     void putStr(const char *s) {

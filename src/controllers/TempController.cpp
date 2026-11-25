@@ -105,7 +105,8 @@ namespace {
 
     void sendTemperature() {
         CompactResponse::begin(PSTR("TMP"), true);
-        CompactResponse::addFloat(currentTemp, 1);
+        // Senza termistore non c'e' una misura: 0, non il valore iniziale (che sembrerebbe una lettura)
+        CompactResponse::addFloat(monitoringEnabled ? currentTemp : 0.0f, 1);
         CompactResponse::addFloat(targetTemp, 1);
         CompactResponse::end();
     }

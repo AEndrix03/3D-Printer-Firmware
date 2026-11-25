@@ -90,13 +90,13 @@ Vedi `contracts/*.json`. In sintesi:
 | Cmd | Descrizione |
 |-----|-------------|
 | frame binario | movimento relativo in step, gia' pianificato (vedi "Movimenti in formato binario"); rifiutato con `ERR LIMIT` se esce dal volume di lavoro. I vecchi `M10`/`M11` di testo non esistono piu' |
-| `M115` | dati per pianificare: `SPM`, `LIM`, `TRV` e `CRT STP` (vedi sotto) |
+| `M115` | dati per pianificare: `SPM`, `LIM`, `QUE`, `TRV` e `CRT STP` (vedi sotto) |
 | `M12 X Y Z` | dichiara la posizione corrente; gli assi indicati diventano riferiti |
 | `M114` | posizione reale in questo istante -> `CRT POS x y z <r>`; `r`=1 se riferita (homing o `M12` dall'accensione) |
 | `M0` | emergency stop: ferma gli step e toglie corrente ai motori |
 | `A10/A11/A12 E F` | estrusione / ritrazione / spurgo |
 | `T10 S<gradi>` | target hotend (rifiutato con `NO_SENSOR` se il termistore e' disabilitato) |
-| `T20` | temperatura -> `CRT TMP <attuale> <target>` |
+| `T20` | temperatura -> `CRT TMP <attuale> <target>`; `<attuale>` vale 0 se il termistore e' disabilitato (nessuna misura) |
 | `T40 [P..] [I..] [D..]` | guadagni del PID dell'hotend (quelli omessi restano) -> `PID <kp> <ki> <kd> <uscita 0-255>` |
 | `S0 [X] [Y] [Z]` | homing degli assi indicati, tutti se omessi (solo da Idle) |
 | `S1` / `S12` | inizio / fine stampa (Idle <-> Printing) |
@@ -261,7 +261,8 @@ a fermo, con i limiti di `MotionConfig.hpp`.
 | Riga | Contenuto |
 |------|-----------|
 | `SPM <x> <y> <z> <e>` | step per mm |
-| `LIM <fx> <fy> <fz> <fe> <axy> <az> <ae> <jd> <rate> <coda> <rx>` | velocita' massime (mm/min), accelerazioni (mm/s^2), deviazione di giunzione (micron), step/s massimi, blocchi utilizzabili della coda, byte del buffer di ricezione |
+| `LIM <fx> <fy> <fz> <fe> <axy> <az> <ae> <jd> <rate>` | velocita' massime (mm/min), accelerazioni (mm/s^2), deviazione di giunzione (micron), step/s massimi |
+| `QUE <coda> <rx>` | blocchi utilizzabili della coda, byte del buffer di ricezione. E' una riga a parte perche' una risposta tiene al massimo 47 caratteri: in coda a `LIM` questi due valori arrivavano tagliati ("15 128" diventava "1") e l'host pianificava con una coda da un blocco |
 | `TRV <x> <y> <z> <assi>` | corsa massima in step e maschera degli assi riferiti (bit0 X, bit1 Y, bit2 Z): l'host rifiuta da se' un movimento fuori volume, prima di spezzarlo in piu' blocchi |
 | `CRT STP <x> <y> <z>` | posizione in step alla fine dei movimenti in coda |
 
@@ -307,6 +308,8 @@ Regole:
   essere cambiata senza che lui lo sappia (arresto, allarme, homing, `M12`, rifiuto, riavvio).
 - In frenata lo Stepper va verso la velocita' di uscita del blocco sempre in rampa, anche da
   sotto: se si e' entrati piu' lenti del previsto la raggiunge accelerando, mai con un salto.
+- Una risposta piu' lunga di 47 caratteri non viene tagliata in silenzio: finisce con `~`, e
+  l'host la conta come errore.
 - Il firmware elabora **un comando per giro** del ciclo principale: tra un comando e il
   successivo watchdog, sicurezza e temperatura vengono sempre aggiornati, anche con il buffer
   di ricezione sempre pieno.
@@ -317,7 +320,7 @@ Regole:
 testo. Errori, rifiuti e duplicati restano righe di testo.
 
 **Quanti frame in volo.** Fino a 8, e mai piu' byte di quanti ne tiene il buffer di ricezione
-del firmware (128, comunicato con `LIM`) meno un margine. Conta piu' del baud: l'adattatore USB
+del firmware (128, comunicato con `QUE`) meno un margine. Conta piu' del baud: l'adattatore USB
 consegna i dati al PC subito solo quando ne ha accumulati 32 byte, altrimenti dopo alcuni
 millisecondi. Con 3 frame in volo e conferme corte si restava a ~430 al secondo qualunque cosa
 facesse la scheda (misurato con `tools/linktest`).

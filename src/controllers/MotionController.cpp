@@ -459,6 +459,9 @@ namespace MotionController {
                 CompactResponse::addInt((int32_t) MotionConfig::ACCELERATION_E);
                 CompactResponse::addInt((int32_t) (MotionConfig::JUNCTION_DEVIATION * 1000.0f)); // micron
                 CompactResponse::addInt(MotionConfig::MAX_STEP_RATE);
+                CompactResponse::end();
+                // Su una riga a parte: tutto insieme non sta nei 48 caratteri di una risposta
+                CompactResponse::begin(PSTR("QUE"));
                 CompactResponse::addInt(Planner::BLOCK_BUFFER_SIZE - 1);
                 CompactResponse::addInt(hal::serial::RX_BUFFER_SIZE);
                 CompactResponse::end();
