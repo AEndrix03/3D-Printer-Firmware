@@ -98,7 +98,7 @@ Vedi `contracts/*.json`. In sintesi:
 | `T10 S<gradi>` | target hotend (rifiutato con `NO_SENSOR` se il termistore e' disabilitato) |
 | `T20` | temperatura -> `CRT TMP <attuale> <target>`; `<attuale>` vale 0 se il termistore e' disabilitato (nessuna misura) |
 | `T40 [P..] [I..] [D..]` | guadagni del PID dell'hotend (quelli omessi restano) -> `PID <kp> <ki> <kd> <uscita 0-255>` |
-| `S0 [X] [Y] [Z]` | homing degli assi indicati, tutti se omessi (solo da Idle) |
+| `S0 [X] [Y] [Z]` | homing degli assi indicati, tutti se omessi (solo da Idle) -> per ogni asse `HOM X START` e poi `HOM X OK [<step>]`, `HOM X FAIL` o `HOM X SKIP` (finecorsa disabilitato). `<step>` e' la posizione che il firmware credeva di avere quando il finecorsa e' scattato: zero se la meccanica non ha perso step dall'homing precedente. Manca se l'asse non era riferito o era gia' sul finecorsa: in quei casi non c'e' una misura |
 | `S1` / `S12` | inizio / fine stampa (Idle <-> Printing) |
 | `S2` / `S3` | pausa / ripresa |
 | `S6` / `S7` | azzera / leggi errore |

@@ -195,7 +195,11 @@ namespace {
 
         sendAxisEvent(PSTR("HOM"), name, PSTR("START"));
 
-        if (!isTriggered()) {
+        // Dove il firmware credeva di essere quando il finecorsa e' scattato. Su un asse gia'
+        // riferito dovrebbe essere zero: la differenza sono gli step che la meccanica ha perso
+        // (o guadagnato) dall'homing precedente. E' l'unica misura di posizione della macchina.
+        const bool sought = !isTriggered();
+        if (sought) {
             if (seek(axis, false, (int32_t) (maxTravelMm * stepsPerMm(axis)), feedrate, true, 0) < 0) return false;
             if (!Stepper::endstopHit()) {
                 sendAxisEvent(PSTR("HOM"), name, PSTR("FAIL"));
@@ -204,13 +208,22 @@ namespace {
             }
         }
 
+        const int32_t found = Stepper::position(axis);
+        const bool measured = sought && (limitAxes & (uint8_t) (1 << axis));
+
         if (seek(axis, true, bounceSteps, feedrate, false, 0) < 0) return false;
 
         // il finecorsa e' lo zero: ci si e' allontanati di bounceSteps
         Stepper::setPosition(axis, bounceSteps);
         Planner::setPosition(axis, bounceSteps);
         limitAxes |= (uint8_t) (1 << axis);
-        sendAxisEvent(PSTR("HOM"), name, PSTR("OK"));
+
+        const char text[2] = {name, '\0'};
+        CompactResponse::begin(PSTR("HOM"));
+        CompactResponse::addStr(text);
+        CompactResponse::addP(PSTR("OK"));
+        if (measured) CompactResponse::addInt(found); // assente = nessuna misura (asse non riferito o gia' sul finecorsa)
+        CompactResponse::end();
         return true;
     }
 
